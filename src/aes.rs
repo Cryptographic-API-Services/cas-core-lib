@@ -4,10 +4,8 @@ use aes_gcm::{
 };
 use rand_07::AsByteSliceMut;
 use std::{
-    ffi::{c_char, CStr, CString},
-    io::{self, Write},
+    ffi::{c_char, CStr, CString}
 };
-use zstd::{stream::Decoder, stream::Encoder};
 
 #[repr(C)]
 pub struct AesEncrypt {

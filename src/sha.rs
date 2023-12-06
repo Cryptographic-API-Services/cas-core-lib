@@ -1,6 +1,5 @@
 use std::{
-    ffi::{c_char, CStr, CString},
-    io,
+    ffi::{c_char, CStr, CString}
 };
 
 use sha3::{Digest, Sha3_256, Sha3_512};

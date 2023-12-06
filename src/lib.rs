@@ -10,4 +10,3 @@ mod md5;
 mod rsa;
 mod scrypt;
 mod sha;
-mod zstd;
