@@ -26,7 +26,6 @@ md-5 = "0.10.5"
 hmac = "0.12.1"
 sha2 = "0.10.6"
 blake2 = "0.10.6"
-zstd = "0.12.3"
 libc = "0.2.146"
 
 [profile.dev.package.num-bigint-dig]
