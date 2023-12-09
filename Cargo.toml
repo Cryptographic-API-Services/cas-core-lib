@@ -1,12 +1,12 @@
 [package]
-name = "performant_encryption"
+name = "cas-core-lib"
 version = "0.1.7"
 edition = "2021"
 description = "This is a Rust library providing external facing functions to performant and trusted encryption in Rust"
 license = "Apache-2.0"
 
 [lib]
-name="performant_encryption"
+name="cas-core-lib"
 path = "src/lib.rs"
 crate-type = ["dylib"]
 
