@@ -27,6 +27,7 @@ hmac = "0.12.1"
 sha2 = "0.10.6"
 blake2 = "0.10.6"
 libc = "0.2.146"
+rayon = "1.8.0"
 
 [profile.dev.package.num-bigint-dig]
 opt-level = 3
