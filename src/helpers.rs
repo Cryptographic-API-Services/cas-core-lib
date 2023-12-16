@@ -11,7 +11,7 @@ pub extern "C" fn free_cstring(s: *mut c_char) {
 }
 
 #[no_mangle]
-pub extern "C" fn free_bytes_vector(ptr: *mut c_uchar) {
+pub extern "C" fn free_bytes(ptr: *mut c_uchar) {
     unsafe {
         libc::free(ptr as *mut c_void);
     }
