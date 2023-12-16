@@ -1,7 +1,5 @@
 use core::slice;
-use std::{
-    ffi::{c_char, CStr, CString, c_uchar}
-};
+use std::ffi::{c_char, c_uchar, CStr, CString};
 
 use sha3::{Digest, Sha3_256, Sha3_512};
 
@@ -29,13 +27,10 @@ fn sha512_hash() {
     assert_ne!(data_to_hash, result_string);
 }
 
-
 #[no_mangle]
 pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) -> *mut c_uchar {
     assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { 
-        std::slice::from_raw_parts(data_to_hash, data_len) 
-    };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
     let mut hasher = Sha3_512::new();
     hasher.update(data_to_hash_slice);
     let result = hasher.finalize();
@@ -58,7 +53,6 @@ fn sha512_bytes_test() {
     let result_slice = unsafe { slice::from_raw_parts(result, data_to_hash_length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }
-
 
 #[no_mangle]
 pub extern "C" fn sha256(data_to_hash: *const c_char) -> *mut c_char {
@@ -87,9 +81,7 @@ fn sha256_hash() {
 #[no_mangle]
 pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) -> *mut c_uchar {
     assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { 
-        std::slice::from_raw_parts(data_to_hash, data_len) 
-    };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
     let mut hasher = Sha3_256::new();
     hasher.update(data_to_hash_slice);
     let result = hasher.finalize();

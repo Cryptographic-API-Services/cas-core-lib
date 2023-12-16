@@ -1,4 +1,4 @@
-use std::ffi::{c_char, CString, c_void, c_uchar};
+use std::ffi::{c_char, c_uchar, c_void, CString};
 
 #[no_mangle]
 pub extern "C" fn free_cstring(s: *mut c_char) {
