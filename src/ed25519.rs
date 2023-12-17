@@ -13,6 +13,20 @@ pub struct Ed25519SignatureResult {
     pub public_key: *mut c_char,
 }
 
+#[repr(C)]
+pub struct Ed25519KeyPairBytesResult {
+    key_pair: *mut c_uchar,
+    length: usize
+}
+
+#[repr(C)]
+pub struct Ed25519ByteSignatureResult {
+    pub signature_byte_ptr: *mut c_uchar,
+    pub signature_length: usize,
+    pub public_key: *mut c_uchar,
+    pub public_key_length: usize
+}
+
 #[no_mangle]
 pub extern "C" fn get_ed25519_key_pair() -> *mut c_char {
     let mut csprng = OsRng {};
@@ -29,22 +43,27 @@ fn get_ed25519_key_pair_test() {
 }
 
 #[no_mangle]
-pub extern "C" fn get_ed25519_key_pair_bytes() -> *mut c_uchar {
+pub extern "C" fn get_ed25519_key_pair_bytes() -> Ed25519KeyPairBytesResult {
     let mut csprng = OsRng {};
     let keypair = Keypair::generate(&mut csprng);
     let keypair_bytes = keypair.to_bytes();
     return unsafe {
         let size_of_result = std::mem::size_of_val(&keypair_bytes);
         let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(keypair_bytes.as_ptr(), result_raw_ptr, size_of_result);  
-        result_raw_ptr
+        std::ptr::copy_nonoverlapping(keypair_bytes.as_ptr(), result_raw_ptr, size_of_result); 
+        let result = Ed25519KeyPairBytesResult {
+            length: size_of_result,
+            key_pair: result_raw_ptr
+        };
+        result
     };
 }
 
 #[test]
 fn get_ed25519_key_pair_bytes_test() {
-    let key_pair_bytes = get_ed25519_key_pair_bytes();
-    assert_eq!(false, key_pair_bytes.is_null());
+    let key_pair_result = get_ed25519_key_pair_bytes();
+    assert_eq!(false, key_pair_result.key_pair.is_null());
+    assert_eq!(true, key_pair_result.length > 0);
 }
 
 #[no_mangle]
@@ -86,6 +105,56 @@ fn sign_with_key_pair_test() {
     let result: Ed25519SignatureResult = sign_with_key_pair(key_pair, message_to_sign);
     assert_ne!(message_to_sign, result.signature);
 }
+
+#[no_mangle]
+pub extern "C" fn sign_with_key_pair_bytes(
+    key_pair: *const c_uchar,
+    key_pair_length: usize,
+    message_to_sign: *const c_uchar,
+    message_to_sign_length: usize
+) -> Ed25519ByteSignatureResult {
+    let key_pair_slice = unsafe {
+        assert!(!key_pair.is_null());
+        std::slice::from_raw_parts(key_pair, key_pair_length)
+    };
+    let message_to_sign_slice = unsafe {
+        assert!(!message_to_sign.is_null());
+        std::slice::from_raw_parts(message_to_sign, message_to_sign_length)
+    };
+    let keypair = Keypair::from_bytes(key_pair_slice).unwrap();
+    let signature = keypair.sign(&message_to_sign_slice);
+    let signature_bytes = signature.to_bytes();
+    let keypair_bytes = keypair.to_bytes();
+    return unsafe {
+        let size_of_signature = std::mem::size_of_val(&signature_bytes);
+        let signature_raw_ptr = libc::malloc(size_of_signature) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(signature_bytes.as_ptr(), signature_raw_ptr, size_of_signature);
+        let size_of_keypair= std::mem::size_of_val(&keypair_bytes);
+        let keypair_raw_ptr = libc::malloc(size_of_keypair) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(keypair_bytes.as_ptr(), keypair_raw_ptr, size_of_keypair);
+        let result =  Ed25519ByteSignatureResult {
+            signature_byte_ptr: signature_raw_ptr,
+            signature_length: size_of_signature,
+            public_key: keypair_raw_ptr,
+            public_key_length: size_of_keypair
+        };
+        result
+    }
+}
+
+#[test]
+fn sign_with_key_pair_bytes_test() {
+    let key_pair_result: Ed25519KeyPairBytesResult = get_ed25519_key_pair_bytes();
+    let message: &str = "ThisIsAMessageToSignWithED25519Dalek";
+    let message_byte: &[u8] = message.as_bytes();
+    let signature_result: Ed25519ByteSignatureResult = sign_with_key_pair_bytes(key_pair_result.key_pair, key_pair_result.length, message_byte.as_ptr(), message_byte.len());
+    assert_eq!(false, signature_result.public_key.is_null());
+    assert_eq!(true, signature_result.public_key_length > 0);
+    assert_eq!(false, signature_result.signature_byte_ptr.is_null());
+    assert_eq!(true, signature_result.signature_length > 0);
+}
+
+
 
 #[no_mangle]
 pub extern "C" fn verify_with_key_pair(
