@@ -3,6 +3,12 @@ use std::ffi::{c_char, c_uchar, CStr, CString};
 
 use sha3::{Digest, Sha3_256, Sha3_512};
 
+#[repr(C)]
+pub struct SHAHashByteResult {
+    pub result_bytes_ptr: *mut c_uchar,
+    pub length: usize,
+}
+
 #[no_mangle]
 pub extern "C" fn sha512(data_to_hash: *const c_char) -> *mut c_char {
     let data_to_hash_bytes = unsafe {
@@ -28,19 +34,22 @@ fn sha512_hash() {
 }
 
 #[no_mangle]
-pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) -> *mut c_uchar {
+pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
     let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
     let mut hasher = Sha3_512::new();
     hasher.update(data_to_hash_slice);
     let result = hasher.finalize();
-    let result_ptr = unsafe {
+    return unsafe {
         let size_of_result = std::mem::size_of_val(&result);
         let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
         std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        result_raw_ptr
+        let result = SHAHashByteResult {
+            result_bytes_ptr: result_raw_ptr,
+            length: size_of_result
+        };
+        result
     };
-    return result_ptr;
 }
 
 #[test]
@@ -79,19 +88,22 @@ fn sha256_hash() {
 }
 
 #[no_mangle]
-pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) -> *mut c_uchar {
+pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
     let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
     let mut hasher = Sha3_256::new();
     hasher.update(data_to_hash_slice);
     let result = hasher.finalize();
-    let result_ptr = unsafe {
+    return unsafe {
         let size_of_result = std::mem::size_of_val(&result);
         let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
         std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        result_raw_ptr
+        let result = SHAHashByteResult {
+            result_bytes_ptr: result_raw_ptr,
+            length: size_of_result
+        };
+        result
     };
-    return result_ptr;
 }
 
 #[test]
