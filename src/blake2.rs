@@ -17,6 +17,18 @@ pub extern "C" fn blake2_512(data: *const c_char) -> *mut c_char {
     return CString::new(base64::encode(result)).unwrap().into_raw();
 }
 
+#[test]
+fn blake2_512_test() {
+    let password = "PasswordToHash";
+    let password_cstr = CString::new(password).unwrap();
+    let password_bytes = password_cstr.as_bytes_with_nul();
+    let passsword_ptr = password_bytes.as_ptr() as *const i8;
+    let hashed_password = blake2_512(passsword_ptr);
+    let hashed_password_ctr = unsafe { CString::from_raw(hashed_password) };
+    let hashed_password_str = hashed_password_ctr.to_str().unwrap();
+    assert_ne!(hashed_password_str, password);
+}
+
 #[no_mangle]
 pub extern "C" fn blake2_512_verify(data: *const c_char, hash: *const c_char) -> bool {
     let data_bytes = unsafe {
@@ -39,18 +51,6 @@ pub extern "C" fn blake2_512_verify(data: *const c_char, hash: *const c_char) ->
     let result = hasher.finalize();
     let result_str = base64::encode(result);
     return result_str == hash_str;
-}
-
-#[test]
-fn blake2_512_test() {
-    let password = "PasswordToHash";
-    let password_cstr = CString::new(password).unwrap();
-    let password_bytes = password_cstr.as_bytes_with_nul();
-    let passsword_ptr = password_bytes.as_ptr() as *const i8;
-    let hashed_password = blake2_512(passsword_ptr);
-    let hashed_password_ctr = unsafe { CString::from_raw(hashed_password) };
-    let hashed_password_str = hashed_password_ctr.to_str().unwrap();
-    assert_ne!(hashed_password_str, password);
 }
 
 #[test]
@@ -88,6 +88,18 @@ pub extern "C" fn blake2_256(data: *const c_char) -> *mut c_char {
     return CString::new(base64::encode(result)).unwrap().into_raw();
 }
 
+#[test]
+fn blake2_256_test() {
+    let password = "PasswordToHash";
+    let password_cstr = CString::new(password).unwrap();
+    let password_bytes = password_cstr.as_bytes_with_nul();
+    let passsword_ptr = password_bytes.as_ptr() as *const i8;
+    let hashed_password = blake2_256(passsword_ptr);
+    let hashed_password_ctr = unsafe { CString::from_raw(hashed_password) };
+    let hashed_password_str = hashed_password_ctr.to_str().unwrap();
+    assert_ne!(hashed_password_str, password);
+}
+
 #[no_mangle]
 pub extern "C" fn blake2_256_verify(data: *const c_char, hash: *const c_char) -> bool {
     let data_bytes = unsafe {
@@ -110,18 +122,6 @@ pub extern "C" fn blake2_256_verify(data: *const c_char, hash: *const c_char) ->
     let result = hasher.finalize();
     let result_str = base64::encode(result);
     return result_str == hash_str;
-}
-
-#[test]
-fn blake2_256_test() {
-    let password = "PasswordToHash";
-    let password_cstr = CString::new(password).unwrap();
-    let password_bytes = password_cstr.as_bytes_with_nul();
-    let passsword_ptr = password_bytes.as_ptr() as *const i8;
-    let hashed_password = blake2_256(passsword_ptr);
-    let hashed_password_ctr = unsafe { CString::from_raw(hashed_password) };
-    let hashed_password_str = hashed_password_ctr.to_str().unwrap();
-    assert_ne!(hashed_password_str, password);
 }
 
 #[test]
