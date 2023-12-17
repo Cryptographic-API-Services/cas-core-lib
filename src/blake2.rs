@@ -1,6 +1,12 @@
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_uchar, CStr, CString};
 
 use blake2::{Blake2b512, Blake2s256, Digest};
+
+#[repr(C)]
+pub struct Blake2HashByteResult {
+    pub result_bytes_ptr: *mut c_uchar,
+    pub length: usize,
+}
 
 #[no_mangle]
 pub extern "C" fn blake2_512(data: *const c_char) -> *mut c_char {
@@ -27,6 +33,53 @@ fn blake2_512_test() {
     let hashed_password_ctr = unsafe { CString::from_raw(hashed_password) };
     let hashed_password_str = hashed_password_ctr.to_str().unwrap();
     assert_ne!(hashed_password_str, password);
+}
+
+#[no_mangle]
+pub extern "C" fn blake2_512_bytes(
+    data: *const c_uchar,
+    data_length: usize,
+) -> Blake2HashByteResult {
+    let data_slice = unsafe {
+        assert!(!data.is_null());
+        std::slice::from_raw_parts(data, data_length)
+    };
+
+    let mut hasher = Blake2b512::new();
+    hasher.update(data_slice);
+    let result = hasher.finalize();
+    return unsafe {
+        let size_of_result = std::mem::size_of_val(&result);
+        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
+        let result = Blake2HashByteResult {
+            result_bytes_ptr: result_raw_ptr,
+            length: size_of_result,
+        };
+        result
+    };
+}
+
+#[no_mangle]
+pub extern "C" fn blake2_512_bytes_verify(
+    hashed_data: *const c_uchar,
+    hashed_data_length: usize,
+    to_compare: *const c_uchar,
+    to_compare_length: usize,
+) -> bool {
+    let data_slice = unsafe {
+        assert!(!hashed_data.is_null());
+        std::slice::from_raw_parts(hashed_data, hashed_data_length)
+    };
+    let to_compare_slice = unsafe {
+        assert!(!to_compare.is_null());
+        std::slice::from_raw_parts(to_compare, to_compare_length)
+    };
+    let mut hasher = Blake2b512::new();
+    hasher.update(to_compare_slice);
+    let result = hasher.finalize();
+    let result_slice: &[u8] = result.as_ref();
+    return result_slice.eq(data_slice);
 }
 
 #[no_mangle]
