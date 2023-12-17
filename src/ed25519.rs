@@ -143,3 +143,13 @@ pub extern "C" fn verify_with_public_key(
     let signature = Signature::from_bytes(&signature_vec).unwrap();
     return public_key.verify(&message_string, &signature).is_ok();
 }
+
+#[test]
+fn verify_with_public_key_test() {
+    let key_pair = get_ed25519_key_pair();
+    let message = "SignThisMessageWithED25519Dalek".as_bytes();
+    let message_to_sign = CString::new(base64::encode(message)).unwrap().into_raw();
+    let result: Ed25519SignatureResult = sign_with_key_pair(key_pair, message_to_sign);
+    let is_valid = verify_with_public_key(result.public_key, result.signature, message_to_sign);
+    assert_eq!(true, is_valid);
+}
