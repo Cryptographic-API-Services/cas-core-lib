@@ -58,6 +58,15 @@ pub extern "C" fn sign_with_key_pair(
     };
 }
 
+#[test]
+fn sign_with_key_pair_test() {
+    let key_pair = get_ed25519_key_pair();
+    let message = "SignThisMessageWithED25519Dalek".as_bytes();
+    let message_to_sign = CString::new(base64::encode(message)).unwrap().into_raw();
+    let result: Ed25519SignatureResult = sign_with_key_pair(key_pair, message_to_sign);
+    assert_ne!(message_to_sign, result.signature);
+}
+
 #[no_mangle]
 pub extern "C" fn verify_with_key_pair(
     key_pair: *const c_char,
