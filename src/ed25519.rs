@@ -299,8 +299,8 @@ pub extern "C" fn verify_with_public_key_bytes(
         assert!(!message.is_null());
         std::slice::from_raw_parts(message, message_length)
     };
-    let public_key_parsed = PublicKey::from_bytes(public_key_slice).unwrap();
-    let signature_parsed = Signature::from_bytes(signature_slice).unwrap();
+    let public_key_parsed = PublicKey::from_bytes(&public_key_slice).unwrap();
+    let signature_parsed = Signature::from_bytes(&signature_slice).unwrap();
     return public_key_parsed.verify(&message_slice, &signature_parsed).is_ok();
 }
 
