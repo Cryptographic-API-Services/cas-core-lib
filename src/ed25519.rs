@@ -6,6 +6,12 @@ use ed25519_dalek::{Keypair, PublicKey, Signature, Verifier};
 use rand_07::rngs::OsRng;
 use std::ffi::{c_char, CStr, CString};
 
+#[repr(C)]
+pub struct Ed25519SignatureResult {
+    pub signature: *mut c_char,
+    pub public_key: *mut c_char,
+}
+
 #[no_mangle]
 pub extern "C" fn get_ed25519_key_pair() -> *mut c_char {
     let mut csprng = OsRng {};
@@ -15,10 +21,10 @@ pub extern "C" fn get_ed25519_key_pair() -> *mut c_char {
         .into_raw();
 }
 
-#[repr(C)]
-pub struct Ed25519SignatureResult {
-    pub signature: *mut c_char,
-    pub public_key: *mut c_char,
+#[test]
+fn get_ed25519_key_pair_test() {
+    let key_pair = get_ed25519_key_pair();
+    assert_eq!(false, key_pair.is_null());
 }
 
 #[no_mangle]
