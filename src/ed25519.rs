@@ -154,8 +154,6 @@ fn sign_with_key_pair_bytes_test() {
     assert_eq!(true, signature_result.signature_length > 0);
 }
 
-
-
 #[no_mangle]
 pub extern "C" fn verify_with_key_pair(
     key_pair: *const c_char,
@@ -199,6 +197,43 @@ fn verify_with_key_pair_test() {
     let is_valid = verify_with_key_pair(key_pair, result.signature, message_to_sign);
     assert_eq!(true, is_valid);
 }
+
+#[no_mangle]
+pub extern "C" fn verify_with_key_pair_bytes(
+    key_pair: *const c_uchar,
+    key_pair_length: usize,
+    signature: *const c_uchar,
+    signature_length: usize,
+    message: *const c_uchar,
+    message_length: usize,
+) -> bool {
+    let key_pair_slice = unsafe {
+        assert!(!key_pair.is_null());
+        std::slice::from_raw_parts(key_pair, key_pair_length)
+    };
+    let signature_slice = unsafe {
+        assert!(!signature.is_null());
+        std::slice::from_raw_parts(signature, signature_length)
+    };
+    let message_slice = unsafe {
+        assert!(!message.is_null());
+        std::slice::from_raw_parts(message, message_length)
+    };
+    let keypair = Keypair::from_bytes(&key_pair_slice).unwrap();
+    let public_key = keypair.public;
+    let signature = Signature::from_bytes(&signature_slice).unwrap();
+    return public_key.verify(&message_slice, &signature).is_ok();
+}
+
+#[test]
+fn verify_with_key_pair_bytes_test() {
+    let key_pair = get_ed25519_key_pair_bytes();
+    let message = "SignThisMessageWithED25519Dalek".as_bytes();
+    let sign_result: Ed25519ByteSignatureResult = sign_with_key_pair_bytes(key_pair.key_pair, key_pair.length, message.as_ptr(), message.len());
+    let is_valid = verify_with_key_pair_bytes(key_pair.key_pair, key_pair.length, sign_result.signature_byte_ptr, sign_result.signature_length, message.as_ptr(), message.len());
+    assert_eq!(true, is_valid);
+}
+
 
 #[no_mangle]
 pub extern "C" fn verify_with_public_key(
