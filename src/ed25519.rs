@@ -124,19 +124,19 @@ pub extern "C" fn sign_with_key_pair_bytes(
     let keypair = Keypair::from_bytes(key_pair_slice).unwrap();
     let signature = keypair.sign(&message_to_sign_slice);
     let signature_bytes = signature.to_bytes();
-    let keypair_bytes = keypair.to_bytes();
+    let public_keypair_bytes = keypair.public.to_bytes();
     return unsafe {
         let size_of_signature = std::mem::size_of_val(&signature_bytes);
         let signature_raw_ptr = libc::malloc(size_of_signature) as *mut c_uchar;
         std::ptr::copy_nonoverlapping(signature_bytes.as_ptr(), signature_raw_ptr, size_of_signature);
-        let size_of_keypair= std::mem::size_of_val(&keypair_bytes);
-        let keypair_raw_ptr = libc::malloc(size_of_keypair) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(keypair_bytes.as_ptr(), keypair_raw_ptr, size_of_keypair);
+        let size_of_public_key= std::mem::size_of_val(&public_keypair_bytes);
+        let public_key_raw_ptr = libc::malloc(size_of_public_key) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(public_keypair_bytes.as_ptr(), public_key_raw_ptr, size_of_public_key);
         let result =  Ed25519ByteSignatureResult {
             signature_byte_ptr: signature_raw_ptr,
             signature_length: size_of_signature,
-            public_key: keypair_raw_ptr,
-            public_key_length: size_of_keypair
+            public_key: public_key_raw_ptr,
+            public_key_length: size_of_public_key
         };
         result
     }
@@ -275,5 +275,40 @@ fn verify_with_public_key_test() {
     let message_to_sign = CString::new(base64::encode(message)).unwrap().into_raw();
     let result: Ed25519SignatureResult = sign_with_key_pair(key_pair, message_to_sign);
     let is_valid = verify_with_public_key(result.public_key, result.signature, message_to_sign);
+    assert_eq!(true, is_valid);
+}
+
+#[no_mangle]
+pub extern "C" fn verify_with_public_key_bytes(
+    public_key: *const c_uchar,
+    public_key_length: usize,
+    signature: *const c_uchar,
+    signature_length: usize,
+    message: *const c_uchar,
+    message_length: usize,
+) -> bool {
+    let public_key_slice = unsafe {
+        assert!(!public_key.is_null());
+        std::slice::from_raw_parts(public_key, public_key_length)
+    };
+    let signature_slice = unsafe {
+        assert!(!signature.is_null());
+        std::slice::from_raw_parts(signature, signature_length)
+    };
+    let message_slice = unsafe {
+        assert!(!message.is_null());
+        std::slice::from_raw_parts(message, message_length)
+    };
+    let public_key_parsed = PublicKey::from_bytes(public_key_slice).unwrap();
+    let signature_parsed = Signature::from_bytes(signature_slice).unwrap();
+    return public_key_parsed.verify(&message_slice, &signature_parsed).is_ok();
+}
+
+#[test]
+fn verify_with_public_key_bytes_test() {
+    let key_pair = get_ed25519_key_pair_bytes();
+    let message = "SignThisMessageWithED25519Dalek".as_bytes();
+    let signature_result: Ed25519ByteSignatureResult = sign_with_key_pair_bytes(key_pair.key_pair, key_pair.length, message.as_ptr(), message.len());
+    let is_valid: bool = verify_with_public_key_bytes(signature_result.public_key, signature_result.public_key_length, signature_result.signature_byte_ptr, signature_result.signature_length, message.as_ptr(), message.len());
     assert_eq!(true, is_valid);
 }
