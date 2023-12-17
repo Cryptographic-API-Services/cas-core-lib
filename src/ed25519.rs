@@ -3,6 +3,7 @@ extern crate rand;
 
 use ed25519_dalek::Signer;
 use ed25519_dalek::{Keypair, PublicKey, Signature, Verifier};
+use libc::c_uchar;
 use rand_07::rngs::OsRng;
 use std::ffi::{c_char, CStr, CString};
 
@@ -25,6 +26,25 @@ pub extern "C" fn get_ed25519_key_pair() -> *mut c_char {
 fn get_ed25519_key_pair_test() {
     let key_pair = get_ed25519_key_pair();
     assert_eq!(false, key_pair.is_null());
+}
+
+#[no_mangle]
+pub extern "C" fn get_ed25519_key_pair_bytes() -> *mut c_uchar {
+    let mut csprng = OsRng {};
+    let keypair = Keypair::generate(&mut csprng);
+    let keypair_bytes = keypair.to_bytes();
+    return unsafe {
+        let size_of_result = std::mem::size_of_val(&keypair_bytes);
+        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(keypair_bytes.as_ptr(), result_raw_ptr, size_of_result);  
+        result_raw_ptr
+    };
+}
+
+#[test]
+fn get_ed25519_key_pair_bytes_test() {
+    let key_pair_bytes = get_ed25519_key_pair_bytes();
+    assert_eq!(false, key_pair_bytes.is_null());
 }
 
 #[no_mangle]
