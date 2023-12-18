@@ -46,7 +46,6 @@ fn argon2_verify_test() {
     assert_eq!(true, is_valid);
 }
 
-
 #[no_mangle]
 pub extern "C" fn argon2_verify_thread(
     hashed_pass: *const c_char,
@@ -119,7 +118,6 @@ fn argon2_hash_test() {
     let hashed_password_str = hashed_password_ctr.to_str().unwrap();
     assert_ne!(password, hashed_password_str);
 }
-
 
 #[no_mangle]
 pub extern "C" fn argon2_hash_thread(pass_to_hash: *const c_char) -> *mut c_char {

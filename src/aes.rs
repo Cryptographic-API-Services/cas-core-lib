@@ -3,9 +3,7 @@ use aes_gcm::{
     Aes128Gcm, Aes256Gcm, KeyInit, Nonce,
 };
 use rand_07::AsByteSliceMut;
-use std::{
-    ffi::{c_char, CStr, CString}
-};
+use std::ffi::{c_char, CStr, CString};
 
 #[repr(C)]
 pub struct AesEncrypt {

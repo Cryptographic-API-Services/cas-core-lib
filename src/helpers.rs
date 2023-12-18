@@ -1,4 +1,4 @@
-use std::ffi::{c_char, CString, c_void};
+use std::ffi::{c_char, c_uchar, c_void, CString};
 
 #[no_mangle]
 pub extern "C" fn free_cstring(s: *mut c_char) {
@@ -11,8 +11,11 @@ pub extern "C" fn free_cstring(s: *mut c_char) {
 }
 
 #[no_mangle]
-pub extern "C" fn free_bytes_vector(ptr: *mut u8) {
+pub extern "C" fn free_bytes(ptr: *mut c_uchar) {
     unsafe {
+        if ptr.is_null() {
+            return;
+        }
         libc::free(ptr as *mut c_void);
     }
 }
