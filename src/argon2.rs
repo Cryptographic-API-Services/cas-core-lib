@@ -1,6 +1,7 @@
+use core::slice;
 use std::{
     ffi::{c_char, CStr, CString, c_uchar},
-    thread, num
+    thread, num, env::home_dir
 };
 
 extern crate rayon;
@@ -163,4 +164,15 @@ pub extern "C" fn argon2_hash_thread(
     };
     std::mem::forget(hashed_passwords);
     return result;
+}
+
+#[test]
+fn argon2_hash_thread_test() {
+    let mut passwords_to_hash = Vec::new();
+    passwords_to_hash.push(CString::new("welcome").unwrap().as_bytes_with_nul().as_ptr() as *const i8);
+    passwords_to_hash.push(CString::new("welcome123").unwrap().as_bytes_with_nul().as_ptr() as *const i8);
+    let passwords_length = passwords_to_hash.len();
+    let result = argon2_hash_thread(passwords_to_hash.as_mut_ptr(), passwords_length);
+    let result_slice = unsafe { slice::from_raw_parts(result.passwords, result.length) };
+    assert_eq!(result_slice.len(), passwords_to_hash.len());
 }
