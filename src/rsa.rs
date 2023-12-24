@@ -1,4 +1,4 @@
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_uchar, CStr, CString};
 
 use rand::rngs::OsRng;
 use rsa::RsaPrivateKey;
@@ -18,6 +18,12 @@ pub struct RsaKeyPair {
 pub struct RsaSignResult {
     pub signature: *mut c_char,
     pub public_key: *mut c_char,
+}
+
+#[repr(C)]
+pub struct RsaEncryptBytesResult {
+    pub encrypted_result_ptr: *mut c_uchar,
+    pub length: usize,
 }
 
 #[no_mangle]
@@ -54,6 +60,43 @@ pub extern "C" fn rsa_encrypt(
     return CString::new(base64::encode(encrypted_bytes))
         .unwrap()
         .into_raw();
+}
+
+#[no_mangle]
+pub extern "C" fn rsa_encrypt_bytes(
+    pub_key: *const c_char,
+    data_to_encrypt: *const c_uchar,
+    data_to_encrypt_length: usize,
+) -> RsaEncryptBytesResult {
+    let pub_key_string = unsafe {
+        assert!(!pub_key.is_null());
+        CStr::from_ptr(pub_key)
+    }
+    .to_str()
+    .unwrap();
+    let data_to_encrypt_slice = unsafe {
+        assert!(!data_to_encrypt.is_null());
+        std::slice::from_raw_parts(data_to_encrypt, data_to_encrypt_length)
+    };
+    let public_key = RsaPublicKey::from_pkcs1_pem(pub_key_string).unwrap();
+    let mut rng = rand::thread_rng();
+    let encrypted_bytes = public_key
+        .encrypt(
+            &mut rng,
+            PaddingScheme::new_pkcs1v15_encrypt(),
+            &data_to_encrypt_slice,
+        )
+        .unwrap();
+    return unsafe {
+        let size_of_result = std::mem::size_of_val(&encrypted_bytes);
+        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(encrypted_bytes.as_ptr(), result_raw_ptr, size_of_result);
+        let result = RsaEncryptBytesResult {
+            encrypted_result_ptr: result_raw_ptr,
+            length: size_of_result,
+        };
+        result
+    };
 }
 
 #[test]
