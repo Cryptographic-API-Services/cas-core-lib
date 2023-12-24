@@ -46,7 +46,7 @@ pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) ->
         std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
         let result = SHAHashByteResult {
             result_bytes_ptr: result_raw_ptr,
-            length: size_of_result
+            length: size_of_result,
         };
         result
     };
@@ -100,7 +100,7 @@ pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) ->
         std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
         let result = SHAHashByteResult {
             result_bytes_ptr: result_raw_ptr,
-            length: size_of_result
+            length: size_of_result,
         };
         result
     };

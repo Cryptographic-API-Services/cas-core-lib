@@ -165,7 +165,10 @@ fn blake2_256_test() {
 }
 
 #[no_mangle]
-pub extern "C" fn  blake2_256_bytes(data_to_hash: *const c_uchar, data_to_hash_length: usize) -> Blake2HashByteResult {
+pub extern "C" fn blake2_256_bytes(
+    data_to_hash: *const c_uchar,
+    data_to_hash_length: usize,
+) -> Blake2HashByteResult {
     let data_to_hash_slice = unsafe {
         assert!(!data_to_hash.is_null());
         std::slice::from_raw_parts(data_to_hash, data_to_hash_length)
@@ -190,11 +193,11 @@ fn blake2_256_bytes_test() {
     let data_to_hash = "Blake2256HashingTechnique";
     let data_to_hash_bytes = data_to_hash.as_bytes();
     let data_to_hash_length = data_to_hash_bytes.len();
-    let result: Blake2HashByteResult = blake2_256_bytes(data_to_hash_bytes.as_ptr(), data_to_hash_length);
+    let result: Blake2HashByteResult =
+        blake2_256_bytes(data_to_hash_bytes.as_ptr(), data_to_hash_length);
     let result_slice = unsafe { slice::from_raw_parts(result.result_bytes_ptr, result.length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }
-
 
 #[no_mangle]
 pub extern "C" fn blake2_256_verify(data: *const c_char, hash: *const c_char) -> bool {
@@ -267,7 +270,8 @@ fn blake2_256_bytes_verify_test() {
     let data_to_hash = "Blake2512HashingTechnique";
     let data_to_hash_bytes = data_to_hash.as_bytes();
     let data_to_hash_length = data_to_hash_bytes.len();
-    let result: Blake2HashByteResult = blake2_256_bytes(data_to_hash_bytes.as_ptr(), data_to_hash_length);
+    let result: Blake2HashByteResult =
+        blake2_256_bytes(data_to_hash_bytes.as_ptr(), data_to_hash_length);
     let result_slice = unsafe { slice::from_raw_parts(result.result_bytes_ptr, result.length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }
