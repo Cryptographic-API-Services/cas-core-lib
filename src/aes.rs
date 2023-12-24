@@ -1,5 +1,5 @@
 use aes_gcm::{
-    aead::{generic_array::GenericArray, AeadMut, OsRng, Payload},
+    aead::{generic_array::GenericArray, AeadMut, OsRng},
     Aes128Gcm, Aes256Gcm, KeyInit, Nonce,
 };
 use rand_07::AsByteSliceMut;

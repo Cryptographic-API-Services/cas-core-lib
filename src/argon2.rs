@@ -1,8 +1,6 @@
-use core::slice;
 use std::{
-    env::home_dir,
-    ffi::{c_char, c_uchar, CStr, CString},
-    num, thread,
+    ffi::{c_char, CStr, CString},
+    thread,
 };
 
 extern crate rayon;
@@ -13,7 +11,7 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use rayon::iter::{IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 #[repr(C)]
 pub struct Argon2ThreadResult {
