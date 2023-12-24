@@ -26,6 +26,12 @@ pub struct RsaEncryptBytesResult {
     pub length: usize,
 }
 
+#[repr(C)]
+pub struct RsaDecryptBytesResult {
+    pub decrypted_result_ptr: *mut c_uchar,
+    pub length: usize,
+}
+
 #[no_mangle]
 pub extern "C" fn rsa_encrypt(
     pub_key: *const c_char,
@@ -146,6 +152,41 @@ pub extern "C" fn rsa_decrypt(
         )
         .expect("failed to decrypt");
     return CString::new(decrypted_bytes).unwrap().into_raw();
+}
+
+#[no_mangle]
+pub extern "C" fn rsa_decrypt_bytes(
+    priv_key: *const c_char,
+    data_to_decrypt: *const c_uchar,
+    data_to_decrypt_length: usize,
+) -> RsaDecryptBytesResult {
+    let priv_key_string = unsafe {
+        assert!(!priv_key.is_null());
+        CStr::from_ptr(priv_key)
+    }
+    .to_str()
+    .unwrap();
+    let data_to_decrypt_slice = unsafe {
+        assert!(!data_to_decrypt.is_null());
+        std::slice::from_raw_parts(data_to_decrypt, data_to_decrypt_length)
+    };
+    let private_key = RsaPrivateKey::from_pkcs8_pem(priv_key_string).unwrap();
+    let decrypted_bytes = private_key
+        .decrypt(
+            PaddingScheme::new_pkcs1v15_encrypt(),
+            &data_to_decrypt_slice,
+        )
+        .expect("failed to decrypt");
+    return unsafe {
+        let size_of_result = std::mem::size_of_val(&decrypted_bytes);
+        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(decrypted_bytes.as_ptr(), result_raw_ptr, size_of_result);
+        let result = RsaDecryptBytesResult {
+            decrypted_result_ptr: result_raw_ptr,
+            length: size_of_result,
+        };
+        result
+    };
 }
 
 #[no_mangle]
