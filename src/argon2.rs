@@ -1,3 +1,4 @@
+use core::slice;
 use std::{
     ffi::{c_char, CStr, CString},
     thread,

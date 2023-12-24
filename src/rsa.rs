@@ -86,23 +86,21 @@ pub extern "C" fn rsa_encrypt_bytes(
     };
     let public_key = RsaPublicKey::from_pkcs1_pem(pub_key_string).unwrap();
     let mut rng = rand::thread_rng();
-    let encrypted_bytes = public_key
+    let mut encrypted_bytes = public_key
         .encrypt(
             &mut rng,
             PaddingScheme::new_pkcs1v15_encrypt(),
-            &data_to_encrypt_slice,
+            data_to_encrypt_slice,
         )
         .unwrap();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&encrypted_bytes);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(encrypted_bytes.as_ptr(), result_raw_ptr, size_of_result);
-        let result = RsaEncryptBytesResult {
-            encrypted_result_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let capacity = encrypted_bytes.capacity();
+    encrypted_bytes.reserve_exact(capacity);
+    let result = RsaEncryptBytesResult {
+        encrypted_result_ptr: encrypted_bytes.as_mut_ptr(),
+        length: encrypted_bytes.len(),
     };
+    std::mem::forget(encrypted_bytes);
+    return result;
 }
 
 #[test]
@@ -166,27 +164,44 @@ pub extern "C" fn rsa_decrypt_bytes(
     }
     .to_str()
     .unwrap();
-    let data_to_decrypt_slice = unsafe {
+
+    let data_to_decrypt_slice: &[u8] = unsafe {
         assert!(!data_to_decrypt.is_null());
         std::slice::from_raw_parts(data_to_decrypt, data_to_decrypt_length)
     };
+
     let private_key = RsaPrivateKey::from_pkcs8_pem(priv_key_string).unwrap();
-    let decrypted_bytes = private_key
-        .decrypt(
+    let mut decrypted_bytes = private_key.decrypt(
             PaddingScheme::new_pkcs1v15_encrypt(),
             &data_to_decrypt_slice,
         )
         .expect("failed to decrypt");
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&decrypted_bytes);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(decrypted_bytes.as_ptr(), result_raw_ptr, size_of_result);
-        let result = RsaDecryptBytesResult {
-            decrypted_result_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let capacity = decrypted_bytes.capacity();
+    decrypted_bytes.reserve_exact(capacity);
+    let result = RsaDecryptBytesResult {
+        decrypted_result_ptr: decrypted_bytes.as_mut_ptr(),
+        length: decrypted_bytes.len(),
     };
+    std::mem::forget(decrypted_bytes);
+    return result;
+}
+
+#[test]
+fn rsa_decrypt_bytes_test() {
+    let data_to_hash = "This is a test hash";
+    let data_to_hash_bytes = data_to_hash.as_bytes();
+    let data_to_hash_length: usize = data_to_hash_bytes.len();
+    let key_pair = get_key_pair(4096);
+    let encryped = rsa_encrypt_bytes(key_pair.pub_key, data_to_hash_bytes.as_ptr(), data_to_hash_length);
+    let decrypred = rsa_decrypt_bytes(key_pair.priv_key, encryped.encrypted_result_ptr, encryped.length);
+    unsafe { 
+        let size_of_result = std::mem::size_of_val(&decrypred.decrypted_result_ptr);
+        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(decrypred.decrypted_result_ptr, result_raw_ptr, size_of_result);
+        let mut_slice = std::slice::from_raw_parts(result_raw_ptr, size_of_result);
+        assert_eq!(data_to_hash_bytes, mut_slice);
+    }
+    
 }
 
 #[no_mangle]
