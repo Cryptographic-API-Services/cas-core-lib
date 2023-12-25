@@ -1,9 +1,9 @@
 use aes_gcm::{
-    aead::{generic_array::GenericArray, AeadMut, OsRng, Payload},
+    aead::{generic_array::GenericArray, AeadMut, OsRng},
     Aes128Gcm, Aes256Gcm, KeyInit, Nonce,
 };
 use rand_07::AsByteSliceMut;
-use std::ffi::{c_char, CStr, CString, c_uchar};
+use std::ffi::{c_char, c_uchar, CStr, CString};
 
 #[repr(C)]
 pub struct AesEncrypt {
@@ -14,13 +14,13 @@ pub struct AesEncrypt {
 #[repr(C)]
 pub struct AesBytesEncrypt {
     pub ciphertext: *mut c_uchar,
-    pub length: usize
+    pub length: usize,
 }
 
 #[repr(C)]
 pub struct AesBytesDecrypt {
     pub plaintext: *mut c_uchar,
-    pub length: usize
+    pub length: usize,
 }
 
 #[no_mangle]
@@ -81,7 +81,7 @@ pub extern "C" fn aes_128_encrypt_bytes_with_key(
     nonce_key: *const c_char,
     key: *const c_char,
     to_encrypt: *const c_uchar,
-    to_encrypt_length: usize
+    to_encrypt_length: usize,
 ) -> AesBytesEncrypt {
     let nonce_string_key = unsafe {
         assert!(!nonce_key.is_null());
@@ -97,9 +97,8 @@ pub extern "C" fn aes_128_encrypt_bytes_with_key(
     }
     .to_str()
     .unwrap();
-    let to_encrypt_slice: &[u8] = unsafe { 
-        std::slice::from_raw_parts(to_encrypt, to_encrypt_length)
-    };
+    let to_encrypt_slice: &[u8] =
+        unsafe { std::slice::from_raw_parts(to_encrypt, to_encrypt_length) };
     let mut decoded_string_key = base64::decode(key_string).unwrap();
     let key = GenericArray::from_slice(decoded_string_key.as_byte_slice_mut());
     let mut cipher = Aes128Gcm::new(&key);
@@ -109,10 +108,10 @@ pub extern "C" fn aes_128_encrypt_bytes_with_key(
     ciphertext.reserve_exact(capacity);
     let result = AesBytesEncrypt {
         ciphertext: ciphertext.as_mut_ptr(),
-        length: ciphertext.len()
+        length: ciphertext.len(),
     };
     std::mem::forget(ciphertext);
-    return result
+    return result;
 }
 
 #[no_mangle]
@@ -120,7 +119,7 @@ pub extern "C" fn aes_256_encrypt_bytes_with_key(
     nonce_key: *const c_char,
     key: *const c_char,
     to_decrypt: *const c_uchar,
-    to_decrypt_length: usize
+    to_decrypt_length: usize,
 ) -> AesBytesEncrypt {
     let nonce_string_key = unsafe {
         assert!(!nonce_key.is_null());
@@ -146,12 +145,11 @@ pub extern "C" fn aes_256_encrypt_bytes_with_key(
     ciphertext.reserve_exact(capacity);
     let result = AesBytesEncrypt {
         ciphertext: ciphertext.as_mut_ptr(),
-        length: ciphertext.len()
+        length: ciphertext.len(),
     };
     std::mem::forget(ciphertext);
     return result;
 }
-
 
 #[no_mangle]
 pub extern "C" fn aes128_decrypt_string(
@@ -200,7 +198,7 @@ pub extern "C" fn aes_128_decrypt_bytes_with_key(
     nonce_key: *const c_char,
     key: *const c_char,
     to_decrypt: *const c_uchar,
-    to_decrypt_length: usize
+    to_decrypt_length: usize,
 ) -> AesBytesDecrypt {
     let nonce_string_key = unsafe {
         assert!(!nonce_key.is_null());
@@ -226,7 +224,7 @@ pub extern "C" fn aes_128_decrypt_bytes_with_key(
     plaintext.reserve_exact(capacity);
     let result = AesBytesDecrypt {
         plaintext: plaintext.as_mut_ptr(),
-        length: plaintext.len()
+        length: plaintext.len(),
     };
     std::mem::forget(plaintext);
     return result;
@@ -237,7 +235,7 @@ pub extern "C" fn aes_256_decrypt_bytes_with_key(
     nonce_key: *const c_char,
     key: *const c_char,
     to_decrypt: *const c_uchar,
-    to_decrypt_length: usize
+    to_decrypt_length: usize,
 ) -> AesBytesDecrypt {
     let nonce_string_key = unsafe {
         assert!(!nonce_key.is_null());
@@ -263,12 +261,11 @@ pub extern "C" fn aes_256_decrypt_bytes_with_key(
     plaintext.reserve_exact(capacity);
     let result = AesBytesDecrypt {
         plaintext: plaintext.as_mut_ptr(),
-        length: plaintext.len()
+        length: plaintext.len(),
     };
     std::mem::forget(plaintext);
     return result;
 }
-
 
 #[no_mangle]
 pub extern "C" fn aes256_encrypt_string_with_key(

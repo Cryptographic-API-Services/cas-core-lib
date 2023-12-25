@@ -1,6 +1,7 @@
+use core::slice;
 use std::{
-    ffi::{c_char, CStr, CString, c_uchar},
-    thread, num
+    ffi::{c_char, CStr, CString},
+    thread,
 };
 
 extern crate rayon;
@@ -11,12 +12,12 @@ use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
 };
-use rayon::iter::{IntoParallelIterator, ParallelIterator, IntoParallelRefMutIterator};
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 #[repr(C)]
 pub struct Argon2ThreadResult {
     pub passwords: *mut *mut c_char,
-    pub length: usize
+    pub length: usize,
 }
 
 #[no_mangle]
@@ -133,7 +134,7 @@ fn argon2_hash_test() {
 #[no_mangle]
 pub extern "C" fn argon2_hash_thread(
     passwords_to_hash: *const *const c_char,
-    num_of_passwords: usize
+    num_of_passwords: usize,
 ) -> Argon2ThreadResult {
     let mut parsed_passwords_to_hash: Vec<&[u8]> = Vec::new();
     unsafe {
@@ -145,22 +146,48 @@ pub extern "C" fn argon2_hash_thread(
     }
     let (sender, receiver): (std::sync::mpsc::Sender<String>, Receiver<String>) = channel();
     let argon2 = Argon2::default();
-    parsed_passwords_to_hash.par_iter_mut().for_each_with(sender.clone(), |task_sender, password| {
-        let salt = SaltString::generate(&mut OsRng);
-        let hashed_password = argon2.hash_password(password, &salt).unwrap().to_string();
-        let _ = task_sender.send(hashed_password);
-    });
+    parsed_passwords_to_hash.par_iter_mut().for_each_with(
+        sender.clone(),
+        |task_sender, password| {
+            let salt = SaltString::generate(&mut OsRng);
+            let hashed_password = argon2.hash_password(password, &salt).unwrap().to_string();
+            let _ = task_sender.send(hashed_password);
+        },
+    );
     let mut hashed_passwords: Vec<*mut i8> = Vec::new();
     for _ in 0..parsed_passwords_to_hash.len() {
-        let result: String = receiver.recv().expect("Error receiving hashed passsword result");
+        let result: String = receiver
+            .recv()
+            .expect("Error receiving hashed passsword result");
         hashed_passwords.push(CString::new(result).unwrap().into_raw());
     }
     let capacity = hashed_passwords.capacity();
     hashed_passwords.reserve_exact(capacity);
     let result = Argon2ThreadResult {
         passwords: hashed_passwords.as_mut_ptr(),
-        length: hashed_passwords.len()
+        length: hashed_passwords.len(),
     };
     std::mem::forget(hashed_passwords);
     return result;
+}
+
+#[test]
+fn argon2_hash_thread_test() {
+    let mut passwords_to_hash = Vec::new();
+    passwords_to_hash.push(
+        CString::new("welcome")
+            .unwrap()
+            .as_bytes_with_nul()
+            .as_ptr() as *const i8,
+    );
+    passwords_to_hash.push(
+        CString::new("welcome123")
+            .unwrap()
+            .as_bytes_with_nul()
+            .as_ptr() as *const i8,
+    );
+    let passwords_length = passwords_to_hash.len();
+    let result = argon2_hash_thread(passwords_to_hash.as_mut_ptr(), passwords_length);
+    let result_slice = unsafe { slice::from_raw_parts(result.passwords, result.length) };
+    assert_eq!(result_slice.len(), passwords_to_hash.len());
 }
