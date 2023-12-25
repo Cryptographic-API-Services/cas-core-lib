@@ -21,6 +21,12 @@ pub struct RsaSignResult {
 }
 
 #[repr(C)]
+pub struct RsaSignBytesResults {
+    pub signature_raw_ptr: *mut c_uchar,
+    pub length: usize
+}
+
+#[repr(C)]
 pub struct RsaEncryptBytesResult {
     pub encrypted_result_ptr: *mut c_uchar,
     pub length: usize,
@@ -261,6 +267,35 @@ pub extern "C" fn rsa_sign(data_to_sign: *mut c_char, key_size: usize) -> RsaSig
         signature: signature,
         public_key: public_key,
     };
+}
+
+#[no_mangle]
+pub extern "C" fn rsa_sign_with_key_bytes(
+    private_key: *const c_char,
+    data_to_sign: *const c_uchar,
+    data_to_sign_length: usize
+) -> RsaSignBytesResults {
+    let private_key_string = unsafe {
+        assert!(!private_key.is_null());
+
+        CStr::from_ptr(private_key)
+    }
+    .to_str()
+    .unwrap();
+    let data_to_sign_slice: &[u8] = unsafe {
+        assert!(!data_to_sign.is_null());
+        std::slice::from_raw_parts(data_to_sign, data_to_sign_length)
+    };
+    let private_key = RsaPrivateKey::from_pkcs8_pem(private_key_string).expect("failed to generate a key");
+    let mut signed_data = private_key.sign(PaddingScheme::new_pkcs1v15_sign_raw(), data_to_sign_slice).unwrap();
+    let capacity = signed_data.capacity();
+    signed_data.reserve_exact(capacity);
+    let result = RsaSignBytesResults {
+        signature_raw_ptr: signed_data.as_mut_ptr(),
+        length: signed_data.len(),
+    };
+    std::mem::forget(signed_data);
+    return result;
 }
 
 #[no_mangle]
