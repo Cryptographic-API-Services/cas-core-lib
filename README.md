@@ -5,6 +5,7 @@ This is our experimental core library which provides a simple FFI layer that tak
 
 ## Consuming Library Documentation
 We utilize some smart people's existing work and we believe their documentation should be reviewed when possible.
+- [Spin Research](https://github.com/SpinResearch)
 - [Dalek-Cryptography](https://github.com/dalek-cryptography)
 - [Rust Crypto](https://github.com/RustCrypto)
 - [Rayon](https://github.com/rayon-rs/rayon)
