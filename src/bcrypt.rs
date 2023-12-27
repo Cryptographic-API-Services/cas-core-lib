@@ -19,23 +19,6 @@ pub extern "C" fn bcrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
     return hashed_password.into_raw();
 }
 
-#[no_mangle]
-pub extern "C" fn bcrypt_hash_thread(pass_to_hash: *const c_char) -> *mut c_char {
-    let string_pass = unsafe {
-        assert!(!pass_to_hash.is_null());
-
-        CStr::from_ptr(pass_to_hash)
-    }
-    .to_str()
-    .unwrap();
-
-    let hashed_password =
-        thread::spawn(move || CString::new(hash(string_pass, DEFAULT_COST).unwrap()).unwrap())
-            .join()
-            .unwrap();
-    return hashed_password.into_raw();
-}
-
 #[test]
 fn bcrypt_hash_test() {
     let password = "PasswordToHash";
