@@ -188,6 +188,9 @@ fn argon2_hash_thread_test() {
     );
     let passwords_length = passwords_to_hash.len();
     let result = argon2_hash_thread(passwords_to_hash.as_mut_ptr(), passwords_length);
-    let result_slice = unsafe { slice::from_raw_parts(result.passwords, result.length) };
+    let result_slice = unsafe { slice::from_raw_parts(result.passwords, result.length) }.to_vec();
     assert_eq!(result_slice.len(), passwords_to_hash.len());
+    for n in 0..result_slice.len() {
+        assert_ne!(result_slice[n] as *const i8, passwords_to_hash[n])
+    }
 }
