@@ -15,12 +15,6 @@ pub struct RsaKeyPair {
 }
 
 #[repr(C)]
-pub struct RsaSignResult {
-    pub signature: *mut c_char,
-    pub public_key: *mut c_char,
-}
-
-#[repr(C)]
 pub struct RsaSignBytesResults {
     pub signature_raw_ptr: *mut c_uchar,
     pub length: usize

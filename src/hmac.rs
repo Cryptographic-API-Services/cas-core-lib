@@ -1,4 +1,3 @@
-use std::ffi::{c_char, CStr, CString};
 
 use hmac::{Hmac, Mac};
 use libc::c_uchar;

@@ -1,5 +1,5 @@
 use core::slice;
-use std::ffi::{c_char, c_uchar, CStr, CString};
+use std::ffi::c_uchar;
 
 use blake2::{Blake2b512, Blake2s256, Digest};
 

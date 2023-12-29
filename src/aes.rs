@@ -6,12 +6,6 @@ use rand_07::AsByteSliceMut;
 use std::ffi::{c_char, c_uchar, CStr, CString};
 
 #[repr(C)]
-pub struct AesEncrypt {
-    pub key: *mut c_char,
-    pub ciphertext: *mut c_char,
-}
-
-#[repr(C)]
 pub struct AesBytesEncrypt {
     pub ciphertext: *mut c_uchar,
     pub length: usize,

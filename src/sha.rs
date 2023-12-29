@@ -1,5 +1,5 @@
 use core::slice;
-use std::ffi::{c_char, c_uchar, CStr, CString};
+use std::ffi::c_uchar;
 
 use sha3::{Digest, Sha3_256, Sha3_512};
 

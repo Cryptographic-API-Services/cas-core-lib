@@ -5,13 +5,6 @@ use ed25519_dalek::Signer;
 use ed25519_dalek::{Keypair, PublicKey, Signature, Verifier};
 use libc::c_uchar;
 use rand_07::rngs::OsRng;
-use std::ffi::{c_char, CStr, CString};
-
-#[repr(C)]
-pub struct Ed25519SignatureResult {
-    pub signature: *mut c_char,
-    pub public_key: *mut c_char,
-}
 
 #[repr(C)]
 pub struct Ed25519KeyPairBytesResult {
