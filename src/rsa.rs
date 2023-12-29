@@ -127,38 +127,6 @@ fn rsa_encrypt_test() {
 }
 
 #[no_mangle]
-pub extern "C" fn rsa_decrypt(
-    priv_key: *const c_char,
-    data_to_decrypt: *const c_char,
-) -> *mut c_char {
-    let priv_key_string = unsafe {
-        assert!(!priv_key.is_null());
-
-        CStr::from_ptr(priv_key)
-    }
-    .to_str()
-    .unwrap();
-
-    let data_to_decrypt_string = unsafe {
-        assert!(!data_to_decrypt.is_null());
-        CStr::from_ptr(data_to_decrypt)
-    }
-    .to_str()
-    .unwrap();
-
-    let data_to_decrypt_bytes = base64::decode(data_to_decrypt_string).unwrap();
-
-    let private_key = RsaPrivateKey::from_pkcs8_pem(priv_key_string).unwrap();
-    let decrypted_bytes = private_key
-        .decrypt(
-            PaddingScheme::new_pkcs1v15_encrypt(),
-            &data_to_decrypt_bytes,
-        )
-        .expect("failed to decrypt");
-    return CString::new(decrypted_bytes).unwrap().into_raw();
-}
-
-#[no_mangle]
 pub extern "C" fn rsa_decrypt_bytes(
     priv_key: *const c_char,
     data_to_decrypt: *const c_uchar,
@@ -219,37 +187,6 @@ pub extern "C" fn get_key_pair(key_size: usize) -> RsaKeyPair {
     return key_pair;
 }
 
-#[no_mangle]
-pub extern "C" fn rsa_sign(data_to_sign: *mut c_char, key_size: usize) -> RsaSignResult {
-    let data_to_sign = unsafe {
-        assert!(!data_to_sign.is_null());
-
-        CStr::from_ptr(data_to_sign)
-    }
-    .to_bytes();
-    let mut rng: OsRng = OsRng;
-    let private_key = RsaPrivateKey::new(&mut rng, key_size).expect("failed to generate a key");
-    let signature = CString::new(base64::encode(
-        private_key
-            .sign(PaddingScheme::new_pkcs1v15_sign_raw(), data_to_sign)
-            .unwrap(),
-    ))
-    .unwrap()
-    .into_raw();
-    let public_key = private_key.to_public_key();
-    let public_key = CString::new(
-        public_key
-            .to_pkcs1_pem(rsa::pkcs1::LineEnding::LF)
-            .unwrap()
-            .to_string(),
-    )
-    .unwrap()
-    .into_raw();
-    return RsaSignResult {
-        signature: signature,
-        public_key: public_key,
-    };
-}
 
 #[no_mangle]
 pub extern "C" fn rsa_sign_with_key_bytes(
@@ -280,35 +217,6 @@ pub extern "C" fn rsa_sign_with_key_bytes(
     return result;
 }
 
-#[no_mangle]
-pub extern "C" fn rsa_sign_with_key(
-    private_key: *const c_char,
-    data_to_sign: *const c_char,
-) -> *mut c_char {
-    let private_key_string = unsafe {
-        assert!(!private_key.is_null());
-
-        CStr::from_ptr(private_key)
-    }
-    .to_str()
-    .unwrap();
-    let data_to_sign = unsafe {
-        assert!(!data_to_sign.is_null());
-
-        CStr::from_ptr(data_to_sign)
-    }
-    .to_bytes();
-    let private_key =
-        RsaPrivateKey::from_pkcs8_pem(private_key_string).expect("failed to generate a key");
-    return CString::new(base64::encode(
-        private_key
-            .sign(PaddingScheme::new_pkcs1v15_sign_raw(), data_to_sign)
-            .unwrap(),
-    ))
-    .unwrap()
-    .into_raw();
-}
-
 #[test]
 fn rsa_sign_nonffi_test() {
     let mut rng: OsRng = OsRng;
@@ -320,44 +228,6 @@ fn rsa_sign_nonffi_test() {
         .sign(PaddingScheme::new_pkcs1v15_sign_raw(), data)
         .unwrap();
     assert_ne!(data.as_slice(), signature);
-}
-
-#[no_mangle]
-pub extern "C" fn rsa_verify(
-    public_key: *mut c_char,
-    data_to_verify: *mut c_char,
-    signature: *mut c_char,
-) -> bool {
-    let public_key_string = unsafe {
-        assert!(!public_key.is_null());
-        CStr::from_ptr(public_key)
-    }
-    .to_str()
-    .unwrap();
-    let data_to_verify_bytes = unsafe {
-        assert!(!data_to_verify.is_null());
-        CStr::from_ptr(data_to_verify)
-    }
-    .to_bytes();
-    let signature_string = unsafe {
-        assert!(!signature.is_null());
-        CStr::from_ptr(signature)
-    }
-    .to_str()
-    .unwrap();
-    let signature_bytes = base64::decode(signature_string).unwrap();
-
-    let public_key = RsaPublicKey::from_pkcs1_pem(public_key_string).unwrap();
-    let verified = public_key.verify(
-        PaddingScheme::new_pkcs1v15_sign_raw(),
-        &data_to_verify_bytes,
-        &signature_bytes,
-    );
-    if verified.is_err() == false {
-        return true;
-    } else {
-        return false;
-    }
 }
 
 #[no_mangle]
