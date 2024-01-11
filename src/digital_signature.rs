@@ -84,7 +84,7 @@ pub extern "C" fn sha_512_rsa_digital_signature_verify(
 }
 
 #[no_mangle]
-pub extern "C" fn sha512_ed25519_dalek_digital_signature(
+pub extern "C" fn sha512_ed25519_digital_signature(
     data_to_sign: *const c_uchar, 
     data_length: usize
 ) -> SHAED25519DalekDigitalSignatureResult {
@@ -125,7 +125,7 @@ pub extern "C" fn sha512_ed25519_dalek_digital_signature(
 }
 
 #[no_mangle]
-pub extern "C" fn sha512_ed25519_dalek_digital_signature_verify(
+pub extern "C" fn sha512_ed25519_digital_signature_verify(
     public_key: *const c_uchar,
     public_key_length: usize,
     data_to_verify: *const c_uchar, 
