@@ -9,3 +9,7 @@ We utilize some smart people's existing work and we believe their documentation 
 - [Dalek-Cryptography](https://github.com/dalek-cryptography)
 - [Rust Crypto](https://github.com/RustCrypto)
 - [Rayon](https://github.com/rayon-rs/rayon)
+
+
+## Disclaimer
+Many of the cryptographic crates that are utilized in our core FFI [layer](./src) have never had a security audit performed. Utilize this SDK at your own risk.
