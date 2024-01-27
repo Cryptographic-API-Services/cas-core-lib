@@ -10,3 +10,4 @@ mod rsa;
 mod scrypt;
 mod sha;
 mod digital_signature;
+mod x25519;
