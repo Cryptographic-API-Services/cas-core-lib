@@ -17,7 +17,7 @@ pub struct RsaKeyPair {
 #[repr(C)]
 pub struct RsaSignBytesResults {
     pub signature_raw_ptr: *mut c_uchar,
-    pub length: usize
+    pub length: usize,
 }
 
 #[repr(C)]
@@ -139,7 +139,8 @@ pub extern "C" fn rsa_decrypt_bytes(
     };
 
     let private_key = RsaPrivateKey::from_pkcs8_pem(priv_key_string).unwrap();
-    let mut decrypted_bytes = private_key.decrypt(
+    let mut decrypted_bytes = private_key
+        .decrypt(
             PaddingScheme::new_pkcs1v15_encrypt(),
             &data_to_decrypt_slice,
         )
@@ -181,12 +182,11 @@ pub extern "C" fn get_key_pair(key_size: usize) -> RsaKeyPair {
     return key_pair;
 }
 
-
 #[no_mangle]
 pub extern "C" fn rsa_sign_with_key_bytes(
     private_key: *const c_char,
     data_to_sign: *const c_uchar,
-    data_to_sign_length: usize
+    data_to_sign_length: usize,
 ) -> RsaSignBytesResults {
     let private_key_string = unsafe {
         assert!(!private_key.is_null());
@@ -199,8 +199,11 @@ pub extern "C" fn rsa_sign_with_key_bytes(
         assert!(!data_to_sign.is_null());
         std::slice::from_raw_parts(data_to_sign, data_to_sign_length)
     };
-    let private_key = RsaPrivateKey::from_pkcs8_pem(private_key_string).expect("failed to generate a key");
-    let mut signed_data = private_key.sign(PaddingScheme::new_pkcs1v15_sign_raw(), data_to_sign_slice).unwrap();
+    let private_key =
+        RsaPrivateKey::from_pkcs8_pem(private_key_string).expect("failed to generate a key");
+    let mut signed_data = private_key
+        .sign(PaddingScheme::new_pkcs1v15_sign_raw(), data_to_sign_slice)
+        .unwrap();
     let capacity = signed_data.capacity();
     signed_data.reserve_exact(capacity);
     let result = RsaSignBytesResults {
@@ -230,7 +233,7 @@ pub extern "C" fn rsa_verify_bytes(
     data_to_verify: *const c_uchar,
     data_to_verify_length: usize,
     signature: *const c_uchar,
-    signature_length: usize 
+    signature_length: usize,
 ) -> bool {
     let public_key_string = unsafe {
         assert!(!public_key.is_null());
@@ -259,8 +262,6 @@ pub extern "C" fn rsa_verify_bytes(
         return false;
     }
 }
-
-
 
 #[test]
 fn rsa_verify_nonffi_test() {

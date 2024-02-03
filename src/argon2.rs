@@ -1,6 +1,6 @@
 use std::{
     ffi::{c_char, CStr, CString},
-    thread, slice,
+    slice, thread,
 };
 
 extern crate rayon;
@@ -67,7 +67,10 @@ fn argon2_verify_fail_test() {
     let hashed_password_ctr = unsafe { CString::from_raw(hashed_password) };
     let hashed_password_bytes = hashed_password_ctr.as_bytes_with_nul();
     let hashed_password_ptr = hashed_password_bytes.as_ptr() as *const i8;
-    let bad_password = CString::new("NotTheFirstPassword").unwrap().as_bytes_with_nul().as_ptr() as *const i8;
+    let bad_password = CString::new("NotTheFirstPassword")
+        .unwrap()
+        .as_bytes_with_nul()
+        .as_ptr() as *const i8;
     let is_valid = argon2_verify(hashed_password_ptr, bad_password);
     assert_eq!(false, is_valid);
 }

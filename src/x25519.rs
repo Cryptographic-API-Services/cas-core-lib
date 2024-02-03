@@ -61,12 +61,20 @@ pub fn diffie_hellman_test() {
         alice_public_key,
         result2.public_key_length,
     );
-    
-    let secret_key_1_slice: &[u8] =
-        unsafe { std::slice::from_raw_parts(shared_secret_1.shared_secret, shared_secret_1.shared_secret_length) };
-    let secret_key_2_slice: &[u8] =
-        unsafe { std::slice::from_raw_parts(shared_secret_2.shared_secret, shared_secret_2.shared_secret_length) };
-        assert_eq!(true, secret_key_1_slice.eq(secret_key_2_slice));
+
+    let secret_key_1_slice: &[u8] = unsafe {
+        std::slice::from_raw_parts(
+            shared_secret_1.shared_secret,
+            shared_secret_1.shared_secret_length,
+        )
+    };
+    let secret_key_2_slice: &[u8] = unsafe {
+        std::slice::from_raw_parts(
+            shared_secret_2.shared_secret,
+            shared_secret_2.shared_secret_length,
+        )
+    };
+    assert_eq!(true, secret_key_1_slice.eq(secret_key_2_slice));
 }
 
 #[no_mangle]
@@ -76,8 +84,7 @@ pub extern "C" fn diffie_hellman(
     other_user_public_key: *const c_uchar,
     other_user_public_key_length: usize,
 ) -> x25519SharedSecretResult {
-    let secret_key_slice =
-        unsafe { std::slice::from_raw_parts(secret_key, secret_key_length) };
+    let secret_key_slice = unsafe { std::slice::from_raw_parts(secret_key, secret_key_length) };
     let other_user_public_key =
         unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) };
 
@@ -90,7 +97,7 @@ pub extern "C" fn diffie_hellman(
     let secret_key = StaticSecret::from(secret_key_array);
     let public_key = PublicKey::from(other_user_public_key_array);
     let shared_secret = secret_key.diffie_hellman(&public_key);
-    let shared_secret_bytes = shared_secret.as_bytes();
+    let shared_secret_bytes = shared_secret.to_bytes();
     return unsafe {
         let size_shared_secret = std::mem::size_of_val(&shared_secret_bytes);
         let shared_secret_ptr = libc::malloc(size_shared_secret) as *mut c_uchar;

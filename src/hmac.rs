@@ -1,4 +1,3 @@
-
 use hmac::{Hmac, Mac};
 use libc::c_uchar;
 use sha2::Sha256;
