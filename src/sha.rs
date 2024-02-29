@@ -28,6 +28,24 @@ pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) ->
     };
 }
 
+#[no_mangle]
+pub extern "C" fn sha512_bytes_verify(
+    data_to_hash: *const c_uchar,
+    data_len: usize,
+    data_to_verify: *const c_uchar,
+    data_to_verify_len: usize,
+) -> bool {
+    assert!(!data_to_hash.is_null());
+    assert!(!data_to_verify.is_null());
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_verify_slice = unsafe {std::slice::from_raw_parts(data_to_verify, data_to_verify_len)};
+    let mut hasher = Sha3_512::new();
+    hasher.update(data_to_hash_slice);
+    let result = hasher.finalize();
+    let result_slice = result.as_slice();
+    return data_to_verify_slice.eq(result_slice);
+}
+
 #[test]
 fn sha512_bytes_test() {
     let data_to_hash = "This is a test hash";
@@ -56,6 +74,24 @@ pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) ->
         };
         result
     };
+}
+
+#[no_mangle]
+pub extern "C" fn sha256_bytes_verify(
+    data_to_hash: *const c_uchar,
+    data_len: usize,
+    data_to_verify: *const c_uchar,
+    data_to_verify_len: usize,
+) -> bool {
+    assert!(!data_to_hash.is_null());
+    assert!(!data_to_verify.is_null());
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_verify_slice = unsafe {std::slice::from_raw_parts(data_to_verify, data_to_verify_len)};
+    let mut hasher = Sha3_256::new();
+    hasher.update(data_to_hash_slice);
+    let result = hasher.finalize();
+    let result_slice = result.as_slice();
+    return data_to_verify_slice.eq(result_slice);
 }
 
 #[test]
