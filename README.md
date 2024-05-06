@@ -1,5 +1,7 @@
 # cas-core-lib
 
+[![image](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/7bXXCQj45q)
+
 ## Overview
 This is our experimental core library which provides a simple FFI layer that takes advantage of Rust's thread safe nature to provide an abstraction layer to higher level languages to run industry standard crytographic operations sequentially and in parallel. Our goal is to decrease the redundancy of engineer's creating this layer proprietary within their internal systems. 
 
