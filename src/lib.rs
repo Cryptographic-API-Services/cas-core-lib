@@ -11,3 +11,4 @@ mod rsa;
 mod scrypt;
 mod sha;
 mod x25519;
+mod ascon_aead;
