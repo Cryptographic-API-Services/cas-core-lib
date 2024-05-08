@@ -11,26 +11,26 @@ pub struct Ascon128EncryptResult {
 
 #[repr(C)]
 pub struct Ascon128DecryptResult {
-    ciphertext: *mut c_uchar,
+    plaintext: *mut c_uchar,
     length: usize,
 }
 
 #[no_mangle]
-pub extern "C" fn ascond_128_key() -> *mut c_char {
+pub extern "C" fn ascon_128_key() -> *mut c_char {
     return CString::new(base64::encode(Ascon128::generate_key(&mut OsRng)))
         .unwrap()
         .into_raw();
 }
 
 #[no_mangle]
-pub extern "C" fn ascond_128_nonce() -> *mut c_char {
+pub extern "C" fn ascon_128_nonce() -> *mut c_char {
     return CString::new(base64::encode(Ascon128::generate_nonce(&mut OsRng)))
         .unwrap()
         .into_raw();
 }
 
 #[no_mangle]
-pub extern "C" fn ascond_128_encrypt(
+pub extern "C" fn ascon_128_encrypt(
     nonce_key: *const c_char,
     key: *const c_char,
     to_encrypt: *const c_uchar,
@@ -47,18 +47,20 @@ pub extern "C" fn ascond_128_encrypt(
     let nonce_key = GenericArray::from_slice(&decoded_key);
 
     let cipher = Ascon128::new(key);
-    let mut tag = cipher.encrypt(&nonce_key, to_encrypt.as_ref()).unwrap();
-
+    let mut ciphertext = cipher.encrypt(&nonce_key, to_encrypt.as_ref()).unwrap();
+    let capacity = ciphertext.capacity();
+    ciphertext.reserve_exact(capacity);
     let result = Ascon128EncryptResult {
-        ciphertext: tag.as_mut_ptr(),
-        length: tag.len(),
+        ciphertext: ciphertext.as_mut_ptr(),
+        length: ciphertext.len(),
     };
+    std::mem::forget(ciphertext);
     result
 }
 
 
 #[no_mangle]
-pub extern "C" fn ascond_128_decrypt(
+pub extern "C" fn ascon_128_decrypt(
     nonce_key: *const c_char,
     key: *const c_char,
     to_encrypt: *const c_uchar,
@@ -76,10 +78,12 @@ pub extern "C" fn ascond_128_decrypt(
 
     let cipher = Ascon128::new(key);
     let mut plaintext = cipher.decrypt(&nonce_key, to_encrypt.as_ref()).unwrap();
-
+    let capacity = plaintext.capacity();
+    plaintext.reserve_exact(capacity);
     let result = Ascon128DecryptResult {
-        ciphertext: plaintext.as_mut_ptr(),
+        plaintext: plaintext.as_mut_ptr(),
         length: plaintext.len(),
     };
+    std::mem::forget(plaintext);
     result
 }
