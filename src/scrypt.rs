@@ -1,4 +1,4 @@
-use std::ffi::{c_char, CStr, CString};
+use std::{ffi::{c_char, CStr, CString}, os::windows::thread, sync::mpsc};
 
 use scrypt::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -30,6 +30,40 @@ fn scrypt_hash_test() {
     let password_bytes = password_cstr.as_bytes_with_nul();
     let password_ptr = password_bytes.as_ptr() as *const i8;
     let hashed = scrypt_hash(password_ptr);
+    let hashed_ctr = unsafe { CString::from_raw(hashed) };
+    let hashed_str = hashed_ctr.to_str().unwrap();
+    assert_ne!(hashed_str, password);
+}
+
+#[no_mangle]
+pub extern "C" fn scrypt_hash_threadpool(pass_to_hash: *const c_char) -> *mut c_char {
+    let string_pass = unsafe {
+        assert!(!pass_to_hash.is_null());
+
+        CStr::from_ptr(pass_to_hash)
+    }
+    .to_str()
+    .unwrap();
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let salt = SaltString::generate(&mut OsRng);
+        let hashed = Scrypt
+            .hash_password(string_pass.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
+        sender.send(hashed);
+    });
+    let result = CString::new(receiver.recv().unwrap()).unwrap().into_raw();
+    result
+}
+
+#[test]
+fn scrypt_hash_threadpool_test() {
+    let password = "PasswordToTest";
+    let password_cstr = CString::new(password).unwrap();
+    let password_bytes = password_cstr.as_bytes_with_nul();
+    let password_ptr = password_bytes.as_ptr() as *const i8;
+    let hashed = scrypt_hash_threadpool(password_ptr);
     let hashed_ctr = unsafe { CString::from_raw(hashed) };
     let hashed_str = hashed_ctr.to_str().unwrap();
     assert_ne!(hashed_str, password);
@@ -73,5 +107,51 @@ fn scrypt_verify_test() {
     let hashed_bytes = hash_ctr.as_bytes_with_nul();
     let hashed_ptr = hashed_bytes.as_ptr() as *const i8;
     let is_valid = scrypt_verify(password_ptr, hashed_ptr);
+    assert_eq!(true, is_valid);
+}
+
+#[no_mangle]
+pub extern "C" fn scrypt_verify_threadpool(
+    pass_to_check: *const c_char,
+    hash_to_check: *const c_char,
+) -> bool {
+    let string_pass = unsafe {
+        assert!(!pass_to_check.is_null());
+
+        CStr::from_ptr(pass_to_check)
+    }
+    .to_str()
+    .unwrap();
+
+    let string_hash = unsafe {
+        assert!(!hash_to_check.is_null());
+
+        CStr::from_ptr(hash_to_check)
+    }
+    .to_str()
+    .unwrap();
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let parsed_hash = PasswordHash::new(&string_hash).unwrap();
+        let thread_result = Scrypt
+            .verify_password(string_pass.as_bytes(), &parsed_hash)
+            .is_ok();
+        sender.send(thread_result);
+    });
+    let result = receiver.recv().unwrap();
+    result
+}
+
+#[test]
+fn scrypt_verify_threadpool_test() {
+    let password = "NotThePasswordYouAreLookingFor";
+    let password_cstr = CString::new(password).unwrap();
+    let password_bytes = password_cstr.as_bytes_with_nul();
+    let password_ptr = password_bytes.as_ptr() as *const i8;
+    let hash = scrypt_hash_threadpool(password_ptr);
+    let hash_ctr = unsafe { CString::from_raw(hash) };
+    let hashed_bytes = hash_ctr.as_bytes_with_nul();
+    let hashed_ptr = hashed_bytes.as_ptr() as *const i8;
+    let is_valid = scrypt_verify_threadpool(password_ptr, hashed_ptr);
     assert_eq!(true, is_valid);
 }
