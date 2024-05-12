@@ -1,4 +1,4 @@
-use std::{ffi::{c_char, CStr, CString}, os::windows::thread, sync::mpsc};
+use std::{ffi::{c_char, CStr, CString},  sync::mpsc};
 
 use scrypt::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
