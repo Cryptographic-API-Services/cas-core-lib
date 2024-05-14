@@ -2,11 +2,17 @@ use aes_gcm::{
     aead::{generic_array::GenericArray, AeadMut, OsRng},
     Aes128Gcm, Aes256Gcm, Key, KeyInit, Nonce,
 };
+use rand::RngCore;
 use rand_07::AsByteSliceMut;
 use std::ffi::{c_char, c_uchar, CStr, CString};
-use x25519_dalek::x25519;
 
 use crate::x25519;
+
+#[repr(C)]
+pub struct AesNonce {
+    pub nonce: *mut c_uchar,
+    pub length: usize
+}
 
 #[repr(C)]
 pub struct AesBytesEncrypt {
@@ -188,6 +194,22 @@ pub fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
         )
     };
     assert_eq!(password_cstr, plain_text_result_slice);
+}
+
+#[no_mangle]
+pub extern "C" fn aes_nonce() -> AesNonce {
+    let mut rng = &mut OsRng;
+    let mut random_bytes = Vec::with_capacity(12);
+    random_bytes.resize(12, 0);
+    rng.fill_bytes(&mut random_bytes);
+    let capacity = random_bytes.capacity();
+    random_bytes.reserve_exact(capacity);
+    let result = AesNonce {
+        nonce: random_bytes.as_mut_ptr(),
+        length: random_bytes.len()
+    };
+    std::mem::forget(random_bytes);
+    result
 }
 
 #[no_mangle]
