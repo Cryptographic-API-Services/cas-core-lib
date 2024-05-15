@@ -2,7 +2,7 @@
 name = "cas_core_lib"
 version = "0.1.7"
 edition = "2021"
-description = "This is a Rust library providing external facing functions to performant and trusted encryption in Rust"
+description = "This is a FFI layer for the RustCrypto and Dalek Cryptgraphgy crates"
 license = "Apache-2.0"
 
 [lib]
