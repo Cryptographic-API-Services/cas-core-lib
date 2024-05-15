@@ -29,7 +29,8 @@ pub struct AesBytesDecrypt {
 #[repr(C)]
 pub struct AesNonceAndKeyFromX25519DiffieHellman {
     pub aes_key_ptr: *mut c_char,
-    pub aes_nonce_ptr: *mut c_char,
+    pub aes_nonce_ptr: *mut c_uchar,
+    pub aes_nonce_ptr_length: usize
 }
 
 #[no_mangle]
@@ -41,13 +42,17 @@ pub extern "C" fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret
         unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) };
 
     let aes_key = Key::<Aes256Gcm>::from_slice(&shared_secret_slice);
-    let mut aes_nonce: [u8; 8] = Default::default();
-    aes_nonce.copy_from_slice(&shared_secret_slice[..8]);
-
+    let mut aes_nonce = Vec::with_capacity(12);
+    aes_nonce.resize(12, 0);
+    aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
+    let capacity = aes_nonce.capacity();
+    aes_nonce.reserve_exact(capacity);
     let result = AesNonceAndKeyFromX25519DiffieHellman {
         aes_key_ptr: CString::new(base64::encode(aes_key)).unwrap().into_raw(),
-        aes_nonce_ptr: CString::new(base64::encode(aes_nonce)).unwrap().into_raw(),
+        aes_nonce_ptr: aes_nonce.as_mut_ptr(),
+        aes_nonce_ptr_length: aes_nonce.len()
     };
+    std::mem::forget(aes_nonce);
     result
 }
 
@@ -93,8 +98,7 @@ pub fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
         bob_shared_secret.shared_secret_length,
     );
 
-    let alice_aes_nonce_cstr = unsafe { CString::from_raw(alice_aes.aes_nonce_ptr) };
-    let alice_aes_nonce_ptr = alice_aes_nonce_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
+
     
     let alice_public_key_cstr = unsafe { CString::from_raw(alice_aes.aes_key_ptr) };
     let alice_public_key_ptr = alice_public_key_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
@@ -102,15 +106,15 @@ pub fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
-    let cipher_text_result = aes_256_encrypt_bytes_with_key(alice_aes_nonce_ptr, alice_public_key_ptr, password_ptr, password_cstr.len());
-    let plain_text_result = aes_256_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_256_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_public_key_ptr, password_ptr, password_cstr.len());
+    let plain_text_result = aes_256_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
-        std::slice::from_raw_parts(
-            plain_text_result.plaintext,
-            plain_text_result.length,
-        )
-    };
-    assert_eq!(password_cstr, plain_text_result_slice);
+         std::slice::from_raw_parts(
+             plain_text_result.plaintext,
+             plain_text_result.length,
+         )
+     };
+     assert_eq!(password_cstr, plain_text_result_slice);
 }
 
 #[no_mangle]
@@ -124,13 +128,17 @@ pub extern "C" fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret
     let mut shorted_shared_secret: [u8; 16] = Default::default();
     shorted_shared_secret.copy_from_slice(&shared_secret_slice[..16]);
     let aes_key = Key::<Aes128Gcm>::from_slice(&shorted_shared_secret);
-    let mut aes_nonce: [u8; 8] = Default::default();
-    aes_nonce.copy_from_slice(&shared_secret_slice[..8]);
-
+    let mut aes_nonce = Vec::with_capacity(12);
+    aes_nonce.resize(12, 0);
+    aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
+    let capacity = aes_nonce.capacity();
+    aes_nonce.reserve_exact(capacity);
     let result = AesNonceAndKeyFromX25519DiffieHellman {
         aes_key_ptr: CString::new(base64::encode(aes_key)).unwrap().into_raw(),
-        aes_nonce_ptr: CString::new(base64::encode(aes_nonce)).unwrap().into_raw(),
+        aes_nonce_ptr: aes_nonce.as_mut_ptr(),
+        aes_nonce_ptr_length: aes_nonce.len()
     };
+    std::mem::forget(aes_nonce);
     result
 }
 
@@ -176,8 +184,6 @@ pub fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
         bob_shared_secret.shared_secret_length,
     );
 
-    let alice_aes_nonce_cstr = unsafe { CString::from_raw(alice_aes.aes_nonce_ptr) };
-    let alice_aes_nonce_ptr = alice_aes_nonce_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
     
     let alice_public_key_cstr = unsafe { CString::from_raw(alice_aes.aes_key_ptr) };
     let alice_public_key_ptr = alice_public_key_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
@@ -185,8 +191,8 @@ pub fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
-    let cipher_text_result = aes_128_encrypt_bytes_with_key(alice_aes_nonce_ptr, alice_public_key_ptr, password_ptr, password_cstr.len());
-    let plain_text_result = aes_128_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_128_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_public_key_ptr, password_ptr, password_cstr.len());
+    let plain_text_result = aes_128_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
         std::slice::from_raw_parts(
             plain_text_result.plaintext,
