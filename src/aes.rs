@@ -15,6 +15,12 @@ pub struct AesNonce {
 }
 
 #[repr(C)]
+pub struct AesKeyResult {
+    pub key: *mut c_uchar,
+    pub length: usize
+}
+
+#[repr(C)]
 pub struct AesBytesEncrypt {
     pub ciphertext: *mut c_uchar,
     pub length: usize,
@@ -28,7 +34,8 @@ pub struct AesBytesDecrypt {
 
 #[repr(C)]
 pub struct AesNonceAndKeyFromX25519DiffieHellman {
-    pub aes_key_ptr: *mut c_char,
+    pub aes_key_ptr: *mut c_uchar,
+    pub aes_key_ptr_length: usize,
     pub aes_nonce_ptr: *mut c_uchar,
     pub aes_nonce_ptr_length: usize
 }
@@ -41,18 +48,24 @@ pub extern "C" fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret
     let shared_secret_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) };
 
-    let aes_key = Key::<Aes256Gcm>::from_slice(&shared_secret_slice);
-    let mut aes_nonce = Vec::with_capacity(12);
-    aes_nonce.resize(12, 0);
-    aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
-    let capacity = aes_nonce.capacity();
-    aes_nonce.reserve_exact(capacity);
+        let mut aes_nonce = Vec::with_capacity(12);
+        aes_nonce.resize(12, 0);
+        aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
+        let capacity = aes_nonce.capacity();
+        aes_nonce.reserve_exact(capacity);
+        
+        let mut aes_key = Key::<Aes256Gcm>::from_slice(&shared_secret_slice).to_vec();
+        let aes_key_capacity = aes_key.capacity();
+        aes_key.reserve_exact(aes_key_capacity);
+
     let result = AesNonceAndKeyFromX25519DiffieHellman {
-        aes_key_ptr: CString::new(base64::encode(aes_key)).unwrap().into_raw(),
+        aes_key_ptr: aes_key.as_mut_ptr(),
+        aes_key_ptr_length: aes_key.len(),
         aes_nonce_ptr: aes_nonce.as_mut_ptr(),
         aes_nonce_ptr_length: aes_nonce.len()
     };
     std::mem::forget(aes_nonce);
+    std::mem::forget(aes_key);
     result
 }
 
@@ -98,16 +111,11 @@ pub fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
         bob_shared_secret.shared_secret_length,
     );
 
-
-    
-    let alice_public_key_cstr = unsafe { CString::from_raw(alice_aes.aes_key_ptr) };
-    let alice_public_key_ptr = alice_public_key_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
-
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
-    let cipher_text_result = aes_256_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_public_key_ptr, password_ptr, password_cstr.len());
-    let plain_text_result = aes_256_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_256_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_aes.aes_key_ptr, alice_aes.aes_key_ptr_length, password_ptr, password_cstr.len());
+    let plain_text_result = aes_256_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, bob_aes.aes_key_ptr_length, cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
          std::slice::from_raw_parts(
              plain_text_result.plaintext,
@@ -127,18 +135,24 @@ pub extern "C" fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret
 
     let mut shorted_shared_secret: [u8; 16] = Default::default();
     shorted_shared_secret.copy_from_slice(&shared_secret_slice[..16]);
-    let aes_key = Key::<Aes128Gcm>::from_slice(&shorted_shared_secret);
     let mut aes_nonce = Vec::with_capacity(12);
     aes_nonce.resize(12, 0);
     aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
     let capacity = aes_nonce.capacity();
     aes_nonce.reserve_exact(capacity);
+
+    let mut aes_key = Key::<Aes128Gcm>::from_slice(&shorted_shared_secret).to_vec();
+    let aes_key_capacity = aes_key.capacity();
+    aes_key.reserve_exact(aes_key_capacity);
+
     let result = AesNonceAndKeyFromX25519DiffieHellman {
-        aes_key_ptr: CString::new(base64::encode(aes_key)).unwrap().into_raw(),
+        aes_key_ptr: aes_key.as_mut_ptr(),
+        aes_key_ptr_length: aes_key.len(),
         aes_nonce_ptr: aes_nonce.as_mut_ptr(),
         aes_nonce_ptr_length: aes_nonce.len()
     };
     std::mem::forget(aes_nonce);
+    std::mem::forget(aes_key);
     result
 }
 
@@ -184,15 +198,11 @@ pub fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
         bob_shared_secret.shared_secret_length,
     );
 
-    
-    let alice_public_key_cstr = unsafe { CString::from_raw(alice_aes.aes_key_ptr) };
-    let alice_public_key_ptr = alice_public_key_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
-
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
-    let cipher_text_result = aes_128_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_public_key_ptr, password_ptr, password_cstr.len());
-    let plain_text_result = aes_128_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_128_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_aes.aes_key_ptr, alice_aes.aes_key_ptr_length, password_ptr, password_cstr.len());
+    let plain_text_result = aes_128_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, bob_aes.aes_key_ptr_length, cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
         std::slice::from_raw_parts(
             plain_text_result.plaintext,
@@ -219,38 +229,45 @@ pub extern "C" fn aes_nonce() -> AesNonce {
 }
 
 #[no_mangle]
-pub extern "C" fn aes_256_key() -> *mut c_char {
-    return CString::new(base64::encode(Aes256Gcm::generate_key(&mut OsRng)))
-        .unwrap()
-        .into_raw();
+pub extern "C" fn aes_256_key() -> AesKeyResult {
+    let mut key = Aes256Gcm::generate_key(&mut OsRng).to_vec();
+    let capacity = key.capacity();
+    key.reserve_exact(capacity);
+    let result = AesKeyResult {
+        key: key.as_mut_ptr(),
+        length: key.len()
+    };
+    std::mem::forget(key);
+    result
 }
 
 #[no_mangle]
-pub extern "C" fn aes_128_key() -> *mut c_char {
-    return CString::new(base64::encode(Aes128Gcm::generate_key(&mut OsRng)))
-        .unwrap()
-        .into_raw();
+pub extern "C" fn aes_128_key() -> AesKeyResult {
+    let mut key = Aes128Gcm::generate_key(&mut OsRng).to_vec();
+    let capacity = key.capacity();
+    key.reserve_exact(capacity);
+    let result = AesKeyResult {
+        key: key.as_mut_ptr(),
+        length: key.len()
+    };
+    std::mem::forget(key);
+    result
 }
 
 #[no_mangle]
 pub extern "C" fn aes_128_encrypt_bytes_with_key(
     nonce_key: *const c_uchar,
     nonce_key_length: usize,
-    key: *const c_char,
+    key: *const c_uchar,
+    key_length: usize,
     to_encrypt: *const c_uchar,
     to_encrypt_length: usize,
 ) -> AesBytesEncrypt {
     let nonce_slice = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) };
-    let key_string = unsafe {
-        assert!(!key.is_null());
-        CStr::from_ptr(key)
-    }
-    .to_str()
-    .unwrap();
+    let key_slice = unsafe {std::slice::from_raw_parts(key, key_length)};
     let to_encrypt_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(to_encrypt, to_encrypt_length) };
-    let mut decoded_string_key = base64::decode(key_string).unwrap();
-    let key = GenericArray::from_slice(decoded_string_key.as_byte_slice_mut());
+    let key = GenericArray::from_slice(key_slice);
     let mut cipher = Aes128Gcm::new(&key);
     let nonce = Nonce::from_slice(nonce_slice); // 96-bits; unique per message
     let mut ciphertext: Vec<u8> = cipher.encrypt(nonce, to_encrypt_slice.as_ref()).unwrap();
@@ -268,20 +285,15 @@ pub extern "C" fn aes_128_encrypt_bytes_with_key(
 pub extern "C" fn aes_256_encrypt_bytes_with_key(
     nonce_key: *const c_uchar,
     nonce_key_length: usize,
-    key: *const c_char,
+    key: *const c_uchar,
+    key_length: usize,
     to_decrypt: *const c_uchar,
     to_decrypt_length: usize,
 ) -> AesBytesEncrypt {
     let nonce_slice = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) };
-    let key_string = unsafe {
-        assert!(!key.is_null());
-        CStr::from_ptr(key)
-    }
-    .to_str()
-    .unwrap();
+    let key_slice = unsafe {std::slice::from_raw_parts(key, key_length)};
     let to_decrypt_slice = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) };
-    let mut decoded_string_key = base64::decode(key_string).unwrap();
-    let key = GenericArray::from_slice(decoded_string_key.as_byte_slice_mut());
+    let key = GenericArray::from_slice(key_slice);
     let mut cipher = Aes256Gcm::new(&key);
     let nonce = Nonce::from_slice(nonce_slice); // 96-bits; unique per message
     let mut ciphertext = cipher.encrypt(nonce, to_decrypt_slice).unwrap();
@@ -299,20 +311,15 @@ pub extern "C" fn aes_256_encrypt_bytes_with_key(
 pub extern "C" fn aes_128_decrypt_bytes_with_key(
     nonce_key: *const c_uchar,
     nonce_key_length: usize,
-    key: *const c_char,
+    key: *const c_uchar,
+    key_length: usize,
     to_decrypt: *const c_uchar,
     to_decrypt_length: usize,
 ) -> AesBytesDecrypt {
     let nonce_slice = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) };
-    let key_string = unsafe {
-        assert!(!key.is_null());
-        CStr::from_ptr(key)
-    }
-    .to_str()
-    .unwrap();
+    let key_slice = unsafe {std::slice::from_raw_parts(key, key_length)};
     let to_decrypt_slice = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) };
-    let mut decoded_string_key = base64::decode(key_string).unwrap();
-    let key = GenericArray::from_slice(decoded_string_key.as_byte_slice_mut());
+    let key = GenericArray::from_slice(key_slice);
     let mut cipher = Aes128Gcm::new(&key);
     let nonce = Nonce::from_slice(nonce_slice); // 96-bits; unique per message
     let mut plaintext = cipher.decrypt(nonce, to_decrypt_slice).unwrap();
@@ -330,20 +337,15 @@ pub extern "C" fn aes_128_decrypt_bytes_with_key(
 pub extern "C" fn aes_256_decrypt_bytes_with_key(
     nonce_key: *const c_uchar,
     nonce_key_length: usize,
-    key: *const c_char,
+    key: *const c_uchar,
+    key_length: usize,
     to_decrypt: *const c_uchar,
     to_decrypt_length: usize,
 ) -> AesBytesDecrypt {
     let nonce_slice = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) };
-    let key_string = unsafe {
-        assert!(!key.is_null());
-        CStr::from_ptr(key)
-    }
-    .to_str()
-    .unwrap();
+    let key_slice = unsafe {std::slice::from_raw_parts(key, key_length)};
     let to_decrypt_slice = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) };
-    let mut decoded_string_key = base64::decode(key_string).unwrap();
-    let key = GenericArray::from_slice(decoded_string_key.as_byte_slice_mut());
+    let key = GenericArray::from_slice(key_slice);
     let mut cipher = Aes256Gcm::new(&key);
     let nonce = Nonce::from_slice(nonce_slice); // 96-bits; unique per message
     let mut plaintext = cipher.decrypt(nonce, to_decrypt_slice).unwrap();
