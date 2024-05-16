@@ -111,16 +111,11 @@ pub fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
         bob_shared_secret.shared_secret_length,
     );
 
-
-    
-    let alice_public_key_cstr = unsafe { CString::from_raw(alice_aes.aes_key_ptr) };
-    let alice_public_key_ptr = alice_public_key_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
-
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
-    let cipher_text_result = aes_256_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_public_key_ptr, password_ptr, password_cstr.len());
-    let plain_text_result = aes_256_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_256_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_aes.aes_key_ptr, alice_aes.aes_key_ptr_length, password_ptr, password_cstr.len());
+    let plain_text_result = aes_256_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, bob_aes.aes_key_ptr_length, cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
          std::slice::from_raw_parts(
              plain_text_result.plaintext,
@@ -203,15 +198,11 @@ pub fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
         bob_shared_secret.shared_secret_length,
     );
 
-    
-    let alice_public_key_cstr = unsafe { CString::from_raw(alice_aes.aes_key_ptr) };
-    let alice_public_key_ptr = alice_public_key_cstr.as_bytes_with_nul().as_ptr() as *const c_char;
-
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
-    let cipher_text_result = aes_128_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_public_key_ptr, password_ptr, password_cstr.len());
-    let plain_text_result = aes_128_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_128_encrypt_bytes_with_key(alice_aes.aes_nonce_ptr, alice_aes.aes_nonce_ptr_length, alice_aes.aes_key_ptr, alice_aes.aes_key_ptr_length, password_ptr, password_cstr.len());
+    let plain_text_result = aes_128_decrypt_bytes_with_key(bob_aes.aes_nonce_ptr, bob_aes.aes_nonce_ptr_length, bob_aes.aes_key_ptr, bob_aes.aes_key_ptr_length, cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
         std::slice::from_raw_parts(
             plain_text_result.plaintext,
