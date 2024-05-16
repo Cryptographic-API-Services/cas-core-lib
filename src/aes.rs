@@ -34,7 +34,8 @@ pub struct AesBytesDecrypt {
 
 #[repr(C)]
 pub struct AesNonceAndKeyFromX25519DiffieHellman {
-    pub aes_key_ptr: *mut c_char,
+    pub aes_key_ptr: *mut c_uchar,
+    pub aes_key_ptr_length: usize,
     pub aes_nonce_ptr: *mut c_uchar,
     pub aes_nonce_ptr_length: usize
 }
@@ -47,18 +48,24 @@ pub extern "C" fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret
     let shared_secret_slice: &[u8] =
         unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) };
 
-    let aes_key = Key::<Aes256Gcm>::from_slice(&shared_secret_slice);
-    let mut aes_nonce = Vec::with_capacity(12);
-    aes_nonce.resize(12, 0);
-    aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
-    let capacity = aes_nonce.capacity();
-    aes_nonce.reserve_exact(capacity);
+        let mut aes_nonce = Vec::with_capacity(12);
+        aes_nonce.resize(12, 0);
+        aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
+        let capacity = aes_nonce.capacity();
+        aes_nonce.reserve_exact(capacity);
+        
+        let mut aes_key = Key::<Aes256Gcm>::from_slice(&shared_secret_slice).to_vec();
+        let aes_key_capacity = aes_key.capacity();
+        aes_key.reserve_exact(aes_key_capacity);
+
     let result = AesNonceAndKeyFromX25519DiffieHellman {
-        aes_key_ptr: CString::new(base64::encode(aes_key)).unwrap().into_raw(),
+        aes_key_ptr: aes_key.as_mut_ptr(),
+        aes_key_ptr_length: aes_key.len(),
         aes_nonce_ptr: aes_nonce.as_mut_ptr(),
         aes_nonce_ptr_length: aes_nonce.len()
     };
     std::mem::forget(aes_nonce);
+    std::mem::forget(aes_key);
     result
 }
 
@@ -133,18 +140,24 @@ pub extern "C" fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret
 
     let mut shorted_shared_secret: [u8; 16] = Default::default();
     shorted_shared_secret.copy_from_slice(&shared_secret_slice[..16]);
-    let aes_key = Key::<Aes128Gcm>::from_slice(&shorted_shared_secret);
     let mut aes_nonce = Vec::with_capacity(12);
     aes_nonce.resize(12, 0);
     aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
     let capacity = aes_nonce.capacity();
     aes_nonce.reserve_exact(capacity);
+
+    let mut aes_key = Key::<Aes128Gcm>::from_slice(&shorted_shared_secret).to_vec();
+    let aes_key_capacity = aes_key.capacity();
+    aes_key.reserve_exact(aes_key_capacity);
+
     let result = AesNonceAndKeyFromX25519DiffieHellman {
-        aes_key_ptr: CString::new(base64::encode(aes_key)).unwrap().into_raw(),
+        aes_key_ptr: aes_key.as_mut_ptr(),
+        aes_key_ptr_length: aes_key.len(),
         aes_nonce_ptr: aes_nonce.as_mut_ptr(),
         aes_nonce_ptr_length: aes_nonce.len()
     };
     std::mem::forget(aes_nonce);
+    std::mem::forget(aes_key);
     result
 }
 
