@@ -123,6 +123,45 @@ pub extern "C" fn rsa_decrypt_bytes(
 }
 
 #[no_mangle]
+pub extern "C" fn rsa_decrypt_bytes_threadpool(
+    priv_key: *const c_char,
+    data_to_decrypt: *const c_uchar,
+    data_to_decrypt_length: usize,
+) -> RsaDecryptBytesResult {
+    let priv_key_string = unsafe {
+        assert!(!priv_key.is_null());
+        CStr::from_ptr(priv_key)
+    }
+    .to_str()
+    .unwrap();
+
+    let data_to_decrypt_slice: &[u8] = unsafe {
+        assert!(!data_to_decrypt.is_null());
+        std::slice::from_raw_parts(data_to_decrypt, data_to_decrypt_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let private_key = RsaPrivateKey::from_pkcs8_pem(priv_key_string).unwrap();
+        let decrypted_bytes = private_key
+            .decrypt(
+                PaddingScheme::new_pkcs1v15_encrypt(),
+                &data_to_decrypt_slice,
+            )
+            .expect("failed to decrypt");
+        sender.send(decrypted_bytes);
+    });
+    let mut decrypted_bytes = receiver.recv().unwrap();
+    let capacity = decrypted_bytes.capacity();
+    decrypted_bytes.reserve_exact(capacity);
+    let result = RsaDecryptBytesResult {
+        decrypted_result_ptr: decrypted_bytes.as_mut_ptr(),
+        length: decrypted_bytes.len(),
+    };
+    std::mem::forget(decrypted_bytes);
+    return result;
+}
+
+#[no_mangle]
 pub extern "C" fn get_key_pair(key_size: usize) -> RsaKeyPair {
     let mut rng: OsRng = OsRng;
     let private_key: RsaPrivateKey =
