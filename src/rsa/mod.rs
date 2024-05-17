@@ -13,42 +13,6 @@ mod types;
 use self::types::{RsaDecryptBytesResult, RsaEncryptBytesResult, RsaKeyGenerationThreadPool, RsaKeyPair, RsaSignBytesResults};
 
 #[no_mangle]
-pub extern "C" fn rsa_encrypt(
-    pub_key: *const c_char,
-    data_to_encrypt: *const c_char,
-) -> *mut c_char {
-    let pub_key_string = unsafe {
-        assert!(!pub_key.is_null());
-
-        CStr::from_ptr(pub_key)
-    }
-    .to_str()
-    .unwrap();
-
-    let data_to_encrypt_bytes = unsafe {
-        assert!(!data_to_encrypt.is_null());
-
-        CStr::from_ptr(data_to_encrypt)
-    }
-    .to_str()
-    .unwrap()
-    .as_bytes();
-
-    let public_key = RsaPublicKey::from_pkcs1_pem(pub_key_string).unwrap();
-    let mut rng = rand::thread_rng();
-    let encrypted_bytes = public_key
-        .encrypt(
-            &mut rng,
-            PaddingScheme::new_pkcs1v15_encrypt(),
-            &data_to_encrypt_bytes,
-        )
-        .unwrap();
-    return CString::new(base64::encode(encrypted_bytes))
-        .unwrap()
-        .into_raw();
-}
-
-#[no_mangle]
 pub extern "C" fn rsa_encrypt_bytes(
     pub_key: *const c_char,
     data_to_encrypt: *const c_uchar,
@@ -83,21 +47,44 @@ pub extern "C" fn rsa_encrypt_bytes(
     return result;
 }
 
-#[test]
-fn rsa_encrypt_test() {
-    let keys = get_key_pair(4096);
-    let public_key_cstr = unsafe { CString::from_raw(keys.pub_key) };
-    let public_key_ptr = public_key_cstr.as_bytes_with_nul().as_ptr() as *const i8;
-
-    let password = "DontUseThisPassword";
-    let password_cstr = CString::new(password).unwrap();
-    let password_bytes = password_cstr.as_bytes_with_nul();
-    let password_ptr = password_bytes.as_ptr() as *const i8;
-
-    let encrypted = rsa_encrypt(public_key_ptr, password_ptr);
-    let encrypted_cstr = unsafe { CString::from_raw(encrypted) };
-    let encrypted_str = encrypted_cstr.to_str().unwrap();
-    assert_ne!(password, encrypted_str);
+#[no_mangle]
+pub extern "C" fn rsa_encrypt_bytes_threadpool(
+    pub_key: *const c_char,
+    data_to_encrypt: *const c_uchar,
+    data_to_encrypt_length: usize,
+) -> RsaEncryptBytesResult {
+    let pub_key_string = unsafe {
+        assert!(!pub_key.is_null());
+        CStr::from_ptr(pub_key)
+    }
+    .to_str()
+    .unwrap();
+    let data_to_encrypt_slice = unsafe {
+        assert!(!data_to_encrypt.is_null());
+        std::slice::from_raw_parts(data_to_encrypt, data_to_encrypt_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let public_key = RsaPublicKey::from_pkcs1_pem(pub_key_string).unwrap();
+        let mut rng = rand::thread_rng();
+        let encrypted_bytes = public_key
+            .encrypt(
+                &mut rng,
+                PaddingScheme::new_pkcs1v15_encrypt(),
+                data_to_encrypt_slice,
+            )
+            .unwrap();
+        sender.send(encrypted_bytes);
+    });
+    let mut encrypted_bytes = receiver.recv().unwrap();
+    let capacity = encrypted_bytes.capacity();
+    encrypted_bytes.reserve_exact(capacity);
+    let result = RsaEncryptBytesResult {
+        encrypted_result_ptr: encrypted_bytes.as_mut_ptr(),
+        length: encrypted_bytes.len(),
+    };
+    std::mem::forget(encrypted_bytes);
+    return result;
 }
 
 #[no_mangle]
