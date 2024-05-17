@@ -1,13 +1,10 @@
 use core::slice;
-use std::ffi::c_uchar;
+use std::{ffi::c_uchar, sync::mpsc};
 
 use blake2::{Blake2b512, Blake2s256, Digest};
 
-#[repr(C)]
-pub struct Blake2HashByteResult {
-    pub result_bytes_ptr: *mut c_uchar,
-    pub length: usize,
-}
+mod types;
+use self::types::Blake2HashByteResult;
 
 #[no_mangle]
 pub extern "C" fn blake2_512_bytes(
@@ -22,6 +19,35 @@ pub extern "C" fn blake2_512_bytes(
     let mut hasher = Blake2b512::new();
     hasher.update(data_slice);
     let result = hasher.finalize();
+    return unsafe {
+        let size_of_result = std::mem::size_of_val(&result);
+        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
+        let result = Blake2HashByteResult {
+            result_bytes_ptr: result_raw_ptr,
+            length: size_of_result,
+        };
+        result
+    };
+}
+
+#[no_mangle]
+pub extern "C" fn blake2_512_bytes_threadpool(
+    data: *const c_uchar,
+    data_length: usize,
+) -> Blake2HashByteResult {
+    let data_slice = unsafe {
+        assert!(!data.is_null());
+        std::slice::from_raw_parts(data, data_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let mut hasher = Blake2b512::new();
+        hasher.update(data_slice);
+        let thread_result = hasher.finalize();
+        sender.send(thread_result);
+    });
+    let result = receiver.recv().unwrap();
     return unsafe {
         let size_of_result = std::mem::size_of_val(&result);
         let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
@@ -67,6 +93,33 @@ pub extern "C" fn blake2_512_bytes_verify(
 }
 
 #[no_mangle]
+pub extern "C" fn blake2_512_bytes_verify_threadpool(
+    hashed_data: *const c_uchar,
+    hashed_data_length: usize,
+    to_compare: *const c_uchar,
+    to_compare_length: usize,
+) -> bool {
+    let data_slice = unsafe {
+        assert!(!hashed_data.is_null());
+        std::slice::from_raw_parts(hashed_data, hashed_data_length)
+    };
+    let to_compare_slice = unsafe {
+        assert!(!to_compare.is_null());
+        std::slice::from_raw_parts(to_compare, to_compare_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let mut hasher = Blake2b512::new();
+        hasher.update(to_compare_slice);
+        let result = hasher.finalize();
+        let result_slice: &[u8] = result.as_ref();
+        sender.send(result_slice.eq(data_slice));
+    });
+    let result = receiver.recv().unwrap();
+    result
+}
+
+#[no_mangle]
 pub extern "C" fn blake2_256_bytes(
     data_to_hash: *const c_uchar,
     data_to_hash_length: usize,
@@ -78,6 +131,34 @@ pub extern "C" fn blake2_256_bytes(
     let mut hasher = Blake2s256::new();
     hasher.update(data_to_hash_slice);
     let result = hasher.finalize();
+    return unsafe {
+        let size_of_result = std::mem::size_of_val(&result);
+        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
+        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
+        let result = Blake2HashByteResult {
+            result_bytes_ptr: result_raw_ptr,
+            length: size_of_result,
+        };
+        result
+    };
+}
+
+#[no_mangle]
+pub extern "C" fn blake2_256_bytes_threadpool(
+    data_to_hash: *const c_uchar,
+    data_to_hash_length: usize,
+) -> Blake2HashByteResult {
+    let data_to_hash_slice = unsafe {
+        assert!(!data_to_hash.is_null());
+        std::slice::from_raw_parts(data_to_hash, data_to_hash_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let mut hasher = Blake2s256::new();
+        hasher.update(data_to_hash_slice);
+        sender.send(hasher.finalize());
+    });
+    let result = receiver.recv().unwrap();
     return unsafe {
         let size_of_result = std::mem::size_of_val(&result);
         let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
@@ -121,6 +202,33 @@ pub extern "C" fn blake2_256_bytes_verify(
     let result = hasher.finalize();
     let result_slice: &[u8] = result.as_ref();
     return result_slice.eq(data_slice);
+}
+
+#[no_mangle]
+pub extern "C" fn blake2_256_bytes_verify_threadpool(
+    hashed_data: *const c_uchar,
+    hashed_data_length: usize,
+    to_compare: *const c_uchar,
+    to_compare_length: usize,
+) -> bool {
+    let data_slice = unsafe {
+        assert!(!hashed_data.is_null());
+        std::slice::from_raw_parts(hashed_data, hashed_data_length)
+    };
+    let to_compare_slice = unsafe {
+        assert!(!to_compare.is_null());
+        std::slice::from_raw_parts(to_compare, to_compare_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let mut hasher = Blake2s256::new();
+        hasher.update(to_compare_slice);
+        let result = hasher.finalize();
+        let result_slice: &[u8] = result.as_ref();
+        sender.send(result_slice.eq(data_slice));
+    });
+    let result = receiver.recv().unwrap();
+    result
 }
 
 #[test]
