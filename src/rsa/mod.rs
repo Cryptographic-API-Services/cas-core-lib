@@ -1,5 +1,5 @@
 use std::ffi::{c_char, c_uchar, CStr, CString};
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
 
 use rand::rngs::OsRng;
 use rsa::RsaPrivateKey;
@@ -255,6 +255,43 @@ pub extern "C" fn rsa_sign_with_key_bytes(
     return result;
 }
 
+#[no_mangle]
+pub extern "C" fn rsa_sign_with_key_bytes_threadpool(
+    private_key: *const c_char,
+    data_to_sign: *const c_uchar,
+    data_to_sign_length: usize,
+) -> RsaSignBytesResults {
+    let private_key_string = unsafe {
+        assert!(!private_key.is_null());
+
+        CStr::from_ptr(private_key)
+    }
+    .to_str()
+    .unwrap();
+    let data_to_sign_slice: &[u8] = unsafe {
+        assert!(!data_to_sign.is_null());
+        std::slice::from_raw_parts(data_to_sign, data_to_sign_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let private_key =
+            RsaPrivateKey::from_pkcs8_pem(private_key_string).expect("failed to generate a key");
+        let signed_data = private_key
+            .sign(PaddingScheme::new_pkcs1v15_sign_raw(), data_to_sign_slice)
+            .unwrap();
+        sender.send(signed_data);
+    });
+    let mut signed_data = receiver.recv().unwrap();
+    let capacity = signed_data.capacity();
+    signed_data.reserve_exact(capacity);
+    let result = RsaSignBytesResults {
+        signature_raw_ptr: signed_data.as_mut_ptr(),
+        length: signed_data.len(),
+    };
+    std::mem::forget(signed_data);
+    return result;
+}
+
 #[test]
 fn rsa_sign_nonffi_test() {
     let mut rng: OsRng = OsRng;
@@ -298,6 +335,47 @@ pub extern "C" fn rsa_verify_bytes(
         &signature_slice,
     );
     if verified.is_err() == false {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn rsa_verify_bytes_threadpool(
+    public_key: *const c_char,
+    data_to_verify: *const c_uchar,
+    data_to_verify_length: usize,
+    signature: *const c_uchar,
+    signature_length: usize,
+) -> bool {
+    let public_key_string = unsafe {
+        assert!(!public_key.is_null());
+
+        CStr::from_ptr(public_key)
+    }
+    .to_str()
+    .unwrap();
+    let data_to_verify_slice: &[u8] = unsafe {
+        assert!(!data_to_verify.is_null());
+        std::slice::from_raw_parts(data_to_verify, data_to_verify_length)
+    };
+    let signature_slice: &[u8] = unsafe {
+        assert!(!signature.is_null());
+        std::slice::from_raw_parts(signature, signature_length)
+    };
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let public_key = RsaPublicKey::from_pkcs1_pem(public_key_string).unwrap();
+        let verified = public_key.verify(
+            PaddingScheme::new_pkcs1v15_sign_raw(),
+            &data_to_verify_slice,
+            &signature_slice,
+        );
+        sender.send(verified.is_err());
+    });
+    let result = receiver.recv().unwrap();
+    if result == false {
         return true;
     } else {
         return false;
