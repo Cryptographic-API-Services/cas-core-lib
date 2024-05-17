@@ -1,4 +1,5 @@
 use std::ffi::{c_char, c_uchar, CStr, CString};
+use std::sync::mpsc;
 
 use rand::rngs::OsRng;
 use rsa::RsaPrivateKey;
@@ -8,29 +9,8 @@ use rsa::{
     PaddingScheme, PublicKey, RsaPublicKey,
 };
 
-#[repr(C)]
-pub struct RsaKeyPair {
-    pub pub_key: *mut c_char,
-    pub priv_key: *mut c_char,
-}
-
-#[repr(C)]
-pub struct RsaSignBytesResults {
-    pub signature_raw_ptr: *mut c_uchar,
-    pub length: usize,
-}
-
-#[repr(C)]
-pub struct RsaEncryptBytesResult {
-    pub encrypted_result_ptr: *mut c_uchar,
-    pub length: usize,
-}
-
-#[repr(C)]
-pub struct RsaDecryptBytesResult {
-    pub decrypted_result_ptr: *mut c_uchar,
-    pub length: usize,
-}
+mod types;
+use self::types::{RsaDecryptBytesResult, RsaEncryptBytesResult, RsaKeyGenerationThreadPool, RsaKeyPair, RsaSignBytesResults};
 
 #[no_mangle]
 pub extern "C" fn rsa_encrypt(
@@ -180,6 +160,41 @@ pub extern "C" fn get_key_pair(key_size: usize) -> RsaKeyPair {
         .into_raw(),
     };
     return key_pair;
+}
+
+#[no_mangle]
+pub extern "C" fn get_key_pair_threadpool(rsa_key_size: usize) -> RsaKeyPair {
+    let (sender, receiver) = mpsc::channel();
+    rayon::spawn(move || {
+        let mut rng: OsRng = OsRng;
+        let private_key: RsaPrivateKey = RsaPrivateKey::new(&mut rng, rsa_key_size).expect("failed to generate a key");
+        let public_key: RsaPublicKey = private_key.to_public_key();
+        let thread_result = RsaKeyGenerationThreadPool {
+            private_key: private_key,
+            public_key: public_key
+        };
+        sender.send(thread_result);
+    });
+    let thread_result: RsaKeyGenerationThreadPool = receiver.recv().unwrap();
+    let result = RsaKeyPair {
+        priv_key: CString::new(
+            thread_result.private_key
+                .to_pkcs8_pem(rsa::pkcs8::LineEnding::LF)
+                .unwrap()
+                .to_string(),
+        )
+        .unwrap()
+        .into_raw(),
+        pub_key: CString::new(
+            thread_result.public_key
+                .to_pkcs1_pem(rsa::pkcs8::LineEnding::LF)
+                .unwrap()
+                .to_string(),
+        )
+        .unwrap()
+        .into_raw()
+    };
+    result
 }
 
 #[no_mangle]
