@@ -29,6 +29,7 @@ libc = "0.2.146"
 rayon = "1.8.0"
 x25519-dalek = {version = "2.0.0", features = ["static_secrets"]}
 ascon-aead = "0.4.2"
+cas-lib = {path = "../cas-lib"}
 
 [profile.dev.package.num-bigint-dig]
 opt-level = 3

@@ -1,6 +1,5 @@
 // Password Hashes
 mod aes;
-mod argon2;
 mod bcrypt;
 mod blake2;
 mod digital_signature;
@@ -12,3 +11,7 @@ mod scrypt;
 mod sha;
 mod x25519;
 mod ascon_aead;
+
+pub mod password_hashers {
+    pub mod argon2;
+}
