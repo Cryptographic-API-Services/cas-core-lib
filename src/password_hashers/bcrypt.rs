@@ -1,8 +1,6 @@
 use std::{
     ffi::{c_char, CStr, CString}, sync::mpsc, thread
 };
-
-use bcrypt::{hash, verify, DEFAULT_COST};
 use cas_lib::password_hashers::{bcrypt::CASBCrypt, cas_password_hasher::CASPasswordHasher};
 
 #[no_mangle]
