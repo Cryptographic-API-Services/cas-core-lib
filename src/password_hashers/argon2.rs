@@ -1,10 +1,4 @@
-use std::{
-    ffi::{c_char, CStr, CString}, sync::mpsc
-};
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
-};
+use std::ffi::{c_char, CStr, CString};
 use cas_lib::password_hashers::{argon2::CASArgon, cas_password_hasher::CASPasswordHasher};
 
 #[no_mangle]

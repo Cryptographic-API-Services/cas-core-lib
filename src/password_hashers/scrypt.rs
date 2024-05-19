@@ -1,10 +1,5 @@
-use std::{ffi::{c_char, CStr, CString},  sync::mpsc};
-
+use std::ffi::{c_char, CStr, CString};
 use cas_lib::password_hashers::{cas_password_hasher::CASPasswordHasher, scrypt::CASScrypt};
-use scrypt::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Scrypt,
-};
 
 #[no_mangle]
 pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
