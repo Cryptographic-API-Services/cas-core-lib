@@ -14,13 +14,10 @@ crate-type = ["dylib"]
 
 [dependencies]
 aes-gcm = "0.10.1"
-argon2 = "0.4.1"
 base64 = "0.20.0"
-bcrypt = "0.13.0"
 rand = "0.8.5"
 rand_07 = { package = "rand", version = "0.7.0" }
 rsa = "0.7.2"
-scrypt = "0.10.0"
 sha3 = "0.10.6"
 hmac = "0.12.1"
 sha2 = "0.10.6"
