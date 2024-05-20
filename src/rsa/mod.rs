@@ -265,12 +265,8 @@ pub extern "C" fn rsa_verify_bytes_threadpool(
         assert!(!signature.is_null());
         std::slice::from_raw_parts(signature, signature_length)
     }.to_vec();
-    let result = <CASRSA as CASRSAEncryption>::verify_threadpool(public_key_string, data_to_verify_slice, signature_slice);
-    if result == false {
-        return true;
-    } else {
-        return false;
-    }
+    let verified = <CASRSA as CASRSAEncryption>::verify_threadpool(public_key_string, data_to_verify_slice, signature_slice);
+    verified
 }
 
 #[test]
