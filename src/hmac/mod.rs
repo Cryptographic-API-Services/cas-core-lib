@@ -1,5 +1,6 @@
 use std::sync::mpsc;
 
+use cas_lib::message::{cas_hmac::CASHMAC, hmac::HMAC};
 use hmac::{Hmac, Mac};
 use libc::c_uchar;
 use sha2::Sha256;
@@ -19,21 +20,18 @@ pub extern "C" fn hmac_sign_bytes(
 ) -> HmacSignByteResult {
     assert!(!key.is_null());
     assert!(!message.is_null());
-    let key_slice: &[u8] = unsafe { std::slice::from_raw_parts(key, key_length) };
-    let message_slice: &[u8] = unsafe { std::slice::from_raw_parts(message, message_length) };
-    let mut mac = HmacSha256::new_from_slice(key_slice).unwrap();
-    mac.update(message_slice);
-    let result = mac.finalize().into_bytes();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = HmacSignByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let key_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
+    let message_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(message, message_length) }.to_vec();
+    let mut result = <HMAC as CASHMAC>::sign(key_slice, message_slice);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = HmacSignByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[no_mangle]
@@ -45,26 +43,18 @@ pub extern "C" fn hmac_sign_bytes_threadpool(
 ) -> HmacSignByteResult {
     assert!(!key.is_null());
     assert!(!message.is_null());
-    let key_slice: &[u8] = unsafe { std::slice::from_raw_parts(key, key_length) };
-    let message_slice: &[u8] = unsafe { std::slice::from_raw_parts(message, message_length) };
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let mut mac = HmacSha256::new_from_slice(key_slice).unwrap();
-        mac.update(message_slice);
-        let result = mac.finalize().into_bytes();
-        sender.send(result);
-    });
-    let result = receiver.recv().unwrap();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = HmacSignByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let key_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
+    let message_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(message, message_length) }.to_vec();
+    let mut result = <HMAC as CASHMAC>::sign_threadpool(key_slice, message_slice);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = HmacSignByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[test]
@@ -96,12 +86,11 @@ pub extern "C" fn hmac_verify_bytes(
     assert!(!key.is_null());
     assert!(!message.is_null());
     assert!(!signature.is_null());
-    let key_slice: &[u8] = unsafe { std::slice::from_raw_parts(key, key_length) };
-    let message_slice: &[u8] = unsafe { std::slice::from_raw_parts(message, message_length) };
-    let signature_slice: &[u8] = unsafe { std::slice::from_raw_parts(signature, signature_length) };
-    let mut mac = HmacSha256::new_from_slice(key_slice).unwrap();
-    mac.update(message_slice);
-    return mac.verify_slice(signature_slice).is_ok();
+    let key_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
+    let message_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(message, message_length) }.to_vec();
+    let signature_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(signature, signature_length) }.to_vec();
+    let result = <HMAC as CASHMAC>::verify(key_slice, message_slice, signature_slice);
+    result
 }
 
 #[no_mangle]
@@ -116,16 +105,10 @@ pub extern "C" fn hmac_verify_bytes_threadpool(
     assert!(!key.is_null());
     assert!(!message.is_null());
     assert!(!signature.is_null());
-    let key_slice: &[u8] = unsafe { std::slice::from_raw_parts(key, key_length) };
-    let message_slice: &[u8] = unsafe { std::slice::from_raw_parts(message, message_length) };
-    let signature_slice: &[u8] = unsafe { std::slice::from_raw_parts(signature, signature_length) };
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let mut mac = HmacSha256::new_from_slice(key_slice).unwrap();
-        mac.update(message_slice);
-        sender.send(mac.verify_slice(signature_slice).is_ok());
-    });
-    let result = receiver.recv().unwrap();
+    let key_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
+    let message_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(message, message_length) }.to_vec();
+    let signature_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(signature, signature_length) }.to_vec();
+    let result = <HMAC as CASHMAC>::verify_threadpool(key_slice, message_slice, signature_slice);
     result
 }
 
