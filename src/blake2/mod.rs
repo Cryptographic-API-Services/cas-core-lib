@@ -1,7 +1,6 @@
-use core::slice;
 use std::{ffi::c_uchar, sync::mpsc};
 
-use blake2::{Blake2b512, Blake2s256, Digest};
+use cas_lib::hashers::{blake2::CASBlake2, cas_hasher::CASHasher};
 
 mod types;
 use self::types::Blake2HashByteResult;
@@ -14,21 +13,18 @@ pub extern "C" fn blake2_512_bytes(
     let data_slice = unsafe {
         assert!(!data.is_null());
         std::slice::from_raw_parts(data, data_length)
-    };
+    }
+    .to_vec();
 
-    let mut hasher = Blake2b512::new();
-    hasher.update(data_slice);
-    let result = hasher.finalize();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = Blake2HashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let mut result: Vec<u8> = <CASBlake2 as CASHasher>::hash_512(data_slice);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = Blake2HashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[no_mangle]
@@ -39,25 +35,22 @@ pub extern "C" fn blake2_512_bytes_threadpool(
     let data_slice = unsafe {
         assert!(!data.is_null());
         std::slice::from_raw_parts(data, data_length)
-    };
+    }
+    .to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Blake2b512::new();
-        hasher.update(data_slice);
-        let thread_result = hasher.finalize();
+        let thread_result: Vec<u8> = <CASBlake2 as CASHasher>::hash_512(data_slice);
         sender.send(thread_result);
     });
-    let result = receiver.recv().unwrap();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = Blake2HashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let mut result = receiver.recv().unwrap();
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = Blake2HashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[test]
@@ -80,16 +73,14 @@ pub extern "C" fn blake2_512_bytes_verify(
     let data_slice = unsafe {
         assert!(!hashed_data.is_null());
         std::slice::from_raw_parts(hashed_data, hashed_data_length)
-    };
+    }
+    .to_vec();
     let to_compare_slice = unsafe {
         assert!(!to_compare.is_null());
         std::slice::from_raw_parts(to_compare, to_compare_length)
-    };
-    let mut hasher = Blake2b512::new();
-    hasher.update(to_compare_slice);
-    let result = hasher.finalize();
-    let result_slice: &[u8] = result.as_ref();
-    return result_slice.eq(data_slice);
+    }
+    .to_vec();
+    return <CASBlake2 as CASHasher>::verify_512(data_slice, to_compare_slice);
 }
 
 #[no_mangle]
@@ -102,18 +93,18 @@ pub extern "C" fn blake2_512_bytes_verify_threadpool(
     let data_slice = unsafe {
         assert!(!hashed_data.is_null());
         std::slice::from_raw_parts(hashed_data, hashed_data_length)
-    };
+    }
+    .to_vec();
     let to_compare_slice = unsafe {
         assert!(!to_compare.is_null());
         std::slice::from_raw_parts(to_compare, to_compare_length)
-    };
+    }
+    .to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Blake2b512::new();
-        hasher.update(to_compare_slice);
-        let result = hasher.finalize();
-        let result_slice: &[u8] = result.as_ref();
-        sender.send(result_slice.eq(data_slice));
+        let thread_result: bool =
+            <CASBlake2 as CASHasher>::verify_512(data_slice, to_compare_slice);
+        sender.send(thread_result);
     });
     let result = receiver.recv().unwrap();
     result
@@ -127,20 +118,17 @@ pub extern "C" fn blake2_256_bytes(
     let data_to_hash_slice = unsafe {
         assert!(!data_to_hash.is_null());
         std::slice::from_raw_parts(data_to_hash, data_to_hash_length)
+    }
+    .to_vec();
+    let mut result = <CASBlake2 as CASHasher>::hash_256(data_to_hash_slice);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = Blake2HashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
-    let mut hasher = Blake2s256::new();
-    hasher.update(data_to_hash_slice);
-    let result = hasher.finalize();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = Blake2HashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
-    };
+    std::mem::forget(result);
+    return return_result
 }
 
 #[no_mangle]
@@ -151,24 +139,22 @@ pub extern "C" fn blake2_256_bytes_threadpool(
     let data_to_hash_slice = unsafe {
         assert!(!data_to_hash.is_null());
         std::slice::from_raw_parts(data_to_hash, data_to_hash_length)
-    };
+    }
+    .to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Blake2s256::new();
-        hasher.update(data_to_hash_slice);
-        sender.send(hasher.finalize());
+        let result = <CASBlake2 as CASHasher>::hash_256(data_to_hash_slice);
+        sender.send(result);
     });
-    let result = receiver.recv().unwrap();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = Blake2HashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let mut result = receiver.recv().unwrap();
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = Blake2HashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[test]
@@ -192,16 +178,15 @@ pub extern "C" fn blake2_256_bytes_verify(
     let data_slice = unsafe {
         assert!(!hashed_data.is_null());
         std::slice::from_raw_parts(hashed_data, hashed_data_length)
-    };
+    }
+    .to_vec();
     let to_compare_slice = unsafe {
         assert!(!to_compare.is_null());
         std::slice::from_raw_parts(to_compare, to_compare_length)
-    };
-    let mut hasher = Blake2s256::new();
-    hasher.update(to_compare_slice);
-    let result = hasher.finalize();
-    let result_slice: &[u8] = result.as_ref();
-    return result_slice.eq(data_slice);
+    }
+    .to_vec();
+    let result = <CASBlake2 as CASHasher>::verify_256(data_slice, to_compare_slice);
+    result
 }
 
 #[no_mangle]
@@ -214,18 +199,17 @@ pub extern "C" fn blake2_256_bytes_verify_threadpool(
     let data_slice = unsafe {
         assert!(!hashed_data.is_null());
         std::slice::from_raw_parts(hashed_data, hashed_data_length)
-    };
+    }
+    .to_vec();
     let to_compare_slice = unsafe {
         assert!(!to_compare.is_null());
         std::slice::from_raw_parts(to_compare, to_compare_length)
-    };
+    }
+    .to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Blake2s256::new();
-        hasher.update(to_compare_slice);
-        let result = hasher.finalize();
-        let result_slice: &[u8] = result.as_ref();
-        sender.send(result_slice.eq(data_slice));
+        let result = <CASBlake2 as CASHasher>::verify_256(data_slice, to_compare_slice);
+        sender.send(result);
     });
     let result = receiver.recv().unwrap();
     result

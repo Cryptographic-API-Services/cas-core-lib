@@ -3,8 +3,6 @@ use std::ffi::{c_char, c_uchar, CStr, CString};
 use cas_lib::asymmetric::cas_asymmetric_encryption::CASRSAEncryption;
 use cas_lib::asymmetric::cas_rsa::CASRSA;
 use cas_lib::asymmetric::types::RSAKeyPairResult;
-use rand::rngs::OsRng;
-use rsa::{RsaPrivateKey, RsaPublicKey};
 
 mod types;
 use self::types::{RsaDecryptBytesResult, RsaEncryptBytesResult, RsaKeyPair, RsaSignBytesResults};
