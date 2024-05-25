@@ -1,6 +1,7 @@
 use core::slice;
 use std::{ffi::c_uchar, sync::mpsc};
 
+use cas_lib::hashers::{cas_hasher::CASHasher, sha::CASSHA};
 use sha3::{Digest, Sha3_256, Sha3_512};
 
 use self::types::SHAHashByteResult;
@@ -9,20 +10,16 @@ mod types;
 #[no_mangle]
 pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
-    let mut hasher = Sha3_512::new();
-    hasher.update(data_to_hash_slice);
-    let result = hasher.finalize();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = SHAHashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
+    let mut result = <CASSHA as CASHasher>::hash_512(data_to_hash_slice);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = SHAHashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[no_mangle]
@@ -31,25 +28,21 @@ pub extern "C" fn sha512_bytes_threadpool(
     data_len: usize,
 ) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Sha3_512::new();
-        hasher.update(data_to_hash_slice);
-        let result = hasher.finalize();
+        let mut result = <CASSHA as CASHasher>::hash_512(data_to_hash_slice);
         sender.send(result);
     });
-    let result = receiver.recv().unwrap();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = SHAHashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let mut result = receiver.recv().unwrap();
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = SHAHashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[no_mangle]
@@ -61,14 +54,11 @@ pub extern "C" fn sha512_bytes_verify(
 ) -> bool {
     assert!(!data_to_hash.is_null());
     assert!(!data_to_verify.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let data_to_verify_slice =
-        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) };
-    let mut hasher = Sha3_512::new();
-    hasher.update(data_to_hash_slice);
-    let result = hasher.finalize();
-    let result_slice = result.as_slice();
-    return data_to_verify_slice.eq(result_slice);
+        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
+    let result = <CASSHA as CASHasher>::verify_512(data_to_verify_slice, data_to_hash_slice);
+    result
 }
 
 #[no_mangle]
@@ -80,16 +70,13 @@ pub extern "C" fn sha512_bytes_verify_threadpool(
 ) -> bool {
     assert!(!data_to_hash.is_null());
     assert!(!data_to_verify.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let data_to_verify_slice =
-        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) };
+        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Sha3_512::new();
-        hasher.update(data_to_hash_slice);
-        let result = hasher.finalize();
-        let result_slice = result.as_slice();
-        sender.send(data_to_verify_slice.eq(result_slice));
+        let result = <CASSHA as CASHasher>::verify_512(data_to_verify_slice, data_to_hash_slice);
+        sender.send(result);
     });
     let result = receiver.recv().unwrap();
     result
@@ -109,20 +96,16 @@ fn sha512_bytes_test() {
 #[no_mangle]
 pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
-    let mut hasher = Sha3_256::new();
-    hasher.update(data_to_hash_slice);
-    let result = hasher.finalize();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = SHAHashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
+    let mut result = <CASSHA as CASHasher>::hash_256(data_to_hash_slice);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = SHAHashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[no_mangle]
@@ -131,25 +114,21 @@ pub extern "C" fn sha256_bytes_threadpool(
     data_len: usize,
 ) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Sha3_256::new();
-        hasher.update(data_to_hash_slice);
-        let result = hasher.finalize();
+        let mut result = <CASSHA as CASHasher>::hash_256(data_to_hash_slice);
         sender.send(result);
     });
-    let result = receiver.recv().unwrap();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&result);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(result.as_ptr(), result_raw_ptr, size_of_result);
-        let result = SHAHashByteResult {
-            result_bytes_ptr: result_raw_ptr,
-            length: size_of_result,
-        };
-        result
+    let mut result = receiver.recv().unwrap();
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = SHAHashByteResult {
+        result_bytes_ptr: result.as_mut_ptr(),
+        length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
 }
 
 #[no_mangle]
@@ -161,14 +140,11 @@ pub extern "C" fn sha256_bytes_verify(
 ) -> bool {
     assert!(!data_to_hash.is_null());
     assert!(!data_to_verify.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let data_to_verify_slice =
-        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) };
-    let mut hasher = Sha3_256::new();
-    hasher.update(data_to_hash_slice);
-    let result = hasher.finalize();
-    let result_slice = result.as_slice();
-    return data_to_verify_slice.eq(result_slice);
+        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
+    let result = <CASSHA as CASHasher>::verify_256(data_to_verify_slice, data_to_hash_slice);
+    result
 }
 
 #[no_mangle]
@@ -180,16 +156,13 @@ pub extern "C" fn sha256_bytes_verify_threadpool(
 ) -> bool {
     assert!(!data_to_hash.is_null());
     assert!(!data_to_verify.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) };
+    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let data_to_verify_slice =
-        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) };
+        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
     let (sender, receiver) = mpsc::channel();
     rayon::spawn(move || {
-        let mut hasher = Sha3_256::new();
-        hasher.update(data_to_hash_slice);
-        let result = hasher.finalize();
-        let result_slice = result.as_slice();
-        sender.send(data_to_verify_slice.eq(result_slice));
+        let result = <CASSHA as CASHasher>::verify_256(data_to_verify_slice, data_to_hash_slice);
+        sender.send(result);
     });
     let result = receiver.recv().unwrap();
     result
