@@ -1,4 +1,3 @@
-// Password Hashes
 mod aes;
 mod blake2;
 mod digital_signature;
