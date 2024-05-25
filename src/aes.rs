@@ -1,6 +1,8 @@
 use cas_lib::symmetric::{aes::{CASAES128, CASAES256}, cas_symmetric_encryption::CASAESEncryption};
 use std::ffi::c_uchar;
 
+use crate::x25519;
+
 #[repr(C)]
 pub struct AesNonce {
     pub nonce: *mut c_uchar,
@@ -48,6 +50,35 @@ pub extern "C" fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret
         aes_nonce.reserve_exact(capacity);
         
         let mut aes_key = <CASAES256 as CASAESEncryption>::key_from_vec(shared_secret_slice);
+        let aes_key_capacity = aes_key.capacity();
+        aes_key.reserve_exact(aes_key_capacity);
+
+    let result = AesNonceAndKeyFromX25519DiffieHellman {
+        aes_key_ptr: aes_key.as_mut_ptr(),
+        aes_key_ptr_length: aes_key.len(),
+        aes_nonce_ptr: aes_nonce.as_mut_ptr(),
+        aes_nonce_ptr_length: aes_nonce.len()
+    };
+    std::mem::forget(aes_nonce);
+    std::mem::forget(aes_key);
+    result
+}
+
+#[no_mangle]
+pub extern "C" fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret_threadpool(
+    shared_secret: *const c_uchar,
+    shared_secret_length: usize,
+) -> AesNonceAndKeyFromX25519DiffieHellman {
+    let shared_secret_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) }.to_vec();
+
+        let mut aes_nonce = Vec::with_capacity(12);
+        aes_nonce.resize(12, 0);
+        aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
+        let capacity = aes_nonce.capacity();
+        aes_nonce.reserve_exact(capacity);
+        
+        let mut aes_key = <CASAES256 as CASAESEncryption>::key_from_vec_threadpool(shared_secret_slice);
         let aes_key_capacity = aes_key.capacity();
         aes_key.reserve_exact(aes_key_capacity);
 
@@ -135,6 +166,37 @@ pub extern "C" fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret
     aes_nonce.reserve_exact(capacity);
 
     let mut aes_key = <CASAES128 as CASAESEncryption>::key_from_vec(shorted_shared_secret.to_vec());
+    let aes_key_capacity = aes_key.capacity();
+    aes_key.reserve_exact(aes_key_capacity);
+
+    let result = AesNonceAndKeyFromX25519DiffieHellman {
+        aes_key_ptr: aes_key.as_mut_ptr(),
+        aes_key_ptr_length: aes_key.len(),
+        aes_nonce_ptr: aes_nonce.as_mut_ptr(),
+        aes_nonce_ptr_length: aes_nonce.len()
+    };
+    std::mem::forget(aes_nonce);
+    std::mem::forget(aes_key);
+    result
+}
+
+#[no_mangle]
+pub extern "C" fn aes_128_key_and_nonce_from_x25519_diffie_hellman_shared_secret_threadpool(
+    shared_secret: *const c_uchar,
+    shared_secret_length: usize,
+) -> AesNonceAndKeyFromX25519DiffieHellman {
+    let shared_secret_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) }.to_vec();
+
+    let mut shorted_shared_secret: [u8; 16] = Default::default();
+    shorted_shared_secret.copy_from_slice(&shared_secret_slice[..16]);
+    let mut aes_nonce = Vec::with_capacity(12);
+    aes_nonce.resize(12, 0);
+    aes_nonce.copy_from_slice(&shared_secret_slice[..12]);
+    let capacity = aes_nonce.capacity();
+    aes_nonce.reserve_exact(capacity);
+
+    let mut aes_key = <CASAES128 as CASAESEncryption>::key_from_vec_threadpool(shorted_shared_secret.to_vec());
     let aes_key_capacity = aes_key.capacity();
     aes_key.reserve_exact(aes_key_capacity);
 
