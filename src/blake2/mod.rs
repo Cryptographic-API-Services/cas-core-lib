@@ -1,4 +1,4 @@
-use std::{ffi::c_uchar, sync::mpsc};
+use std::{ffi::c_uchar, slice, sync::mpsc};
 
 use cas_lib::hashers::{blake2::CASBlake2, cas_hasher::CASHasher};
 
