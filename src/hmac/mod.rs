@@ -1,5 +1,3 @@
-use std::sync::mpsc;
-
 use cas_lib::message::{cas_hmac::CASHMAC, hmac::HMAC};
 use libc::c_uchar;
 
