@@ -1,3 +1,4 @@
+use cas_lib::key_exchange::{cas_key_exchange::CASKeyExchange, x25519::X25519};
 use rsa::rand_core::OsRng;
 use std::ffi::c_uchar;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -18,27 +19,42 @@ pub struct x25519SharedSecretResult {
 
 #[no_mangle]
 pub extern "C" fn generate_secret_and_public_key() -> x25519SecretPublicKeyResult {
-    let secret_key = StaticSecret::random_from_rng(&mut OsRng);
-    let public_key = PublicKey::from(&secret_key);
-    let secret_key_bytes = secret_key.to_bytes();
-    let public_key_bytes = public_key.to_bytes();
-    return unsafe {
-        let size_secret_key = std::mem::size_of_val(&secret_key_bytes);
-        let secret_key_ptr = libc::malloc(size_secret_key) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(secret_key_bytes.as_ptr(), secret_key_ptr, size_secret_key);
-
-        let size_public_key = std::mem::size_of_val(&public_key_bytes);
-        let public_key_ptr = libc::malloc(size_public_key) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(public_key_bytes.as_ptr(), public_key_ptr, size_public_key);
-
-        let result = x25519SecretPublicKeyResult {
-            secret_key: secret_key_ptr,
-            secret_key_length: size_secret_key,
-            public_key: public_key_ptr,
-            public_key_length: size_public_key,
-        };
-        result
+    let result = <X25519 as CASKeyExchange>::generate_secret_and_public_key();
+    let mut secret_key = result.secret_key;
+    let mut public_key = result.public_key;
+    let secret_key_capacity = secret_key.capacity();
+    secret_key.reserve_exact(secret_key_capacity);
+    let public_key_capacity = public_key.capacity();
+    public_key.reserve_exact(public_key_capacity);
+    let result = x25519SecretPublicKeyResult {
+        secret_key: secret_key.as_mut_ptr(),
+        secret_key_length: secret_key.len(),
+        public_key: public_key.as_mut_ptr(),
+        public_key_length: public_key.len(),
     };
+    std::mem::forget(public_key);
+    std::mem::forget(secret_key);
+    result
+}
+
+#[no_mangle]
+pub extern "C" fn generate_secret_and_public_key_threadpool() -> x25519SecretPublicKeyResult {
+    let result = <X25519 as CASKeyExchange>::generate_secret_and_public_key_threadpool();
+    let mut secret_key = result.secret_key;
+    let mut public_key = result.public_key;
+    let secret_key_capacity = secret_key.capacity();
+    secret_key.reserve_exact(secret_key_capacity);
+    let public_key_capacity = public_key.capacity();
+    public_key.reserve_exact(public_key_capacity);
+    let result = x25519SecretPublicKeyResult {
+        secret_key: secret_key.as_mut_ptr(),
+        secret_key_length: secret_key.len(),
+        public_key: public_key.as_mut_ptr(),
+        public_key_length: public_key.len(),
+    };
+    std::mem::forget(public_key);
+    std::mem::forget(secret_key);
+    result
 }
 
 #[test]
@@ -84,32 +100,43 @@ pub extern "C" fn diffie_hellman(
     other_user_public_key: *const c_uchar,
     other_user_public_key_length: usize,
 ) -> x25519SharedSecretResult {
-    let secret_key_slice = unsafe { std::slice::from_raw_parts(secret_key, secret_key_length) };
+    let secret_key_slice =
+        unsafe { std::slice::from_raw_parts(secret_key, secret_key_length) }.to_vec();
     let other_user_public_key =
-        unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) };
-
-    let mut secret_key_array: [u8; 32] = Default::default();
-    secret_key_array.copy_from_slice(&secret_key_slice);
-
-    let mut other_user_public_key_array: [u8; 32] = Default::default();
-    other_user_public_key_array.copy_from_slice(&other_user_public_key);
-
-    let secret_key = StaticSecret::from(secret_key_array);
-    let public_key = PublicKey::from(other_user_public_key_array);
-    let shared_secret = secret_key.diffie_hellman(&public_key);
-    let shared_secret_bytes = shared_secret.to_bytes();
-    return unsafe {
-        let size_shared_secret = std::mem::size_of_val(&shared_secret_bytes);
-        let shared_secret_ptr = libc::malloc(size_shared_secret) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(
-            shared_secret_bytes.as_ptr(),
-            shared_secret_ptr,
-            size_shared_secret,
-        );
-        let result = x25519SharedSecretResult {
-            shared_secret: shared_secret_ptr,
-            shared_secret_length: size_shared_secret,
-        };
-        result
+        unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) }
+            .to_vec();
+    let mut result =
+        <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = x25519SharedSecretResult {
+        shared_secret: result.as_mut_ptr(),
+        shared_secret_length: result.len(),
     };
+    std::mem::forget(result);
+    return_result
+}
+
+#[no_mangle]
+pub extern "C" fn diffie_hellman_threadpool(
+    secret_key: *const c_uchar,
+    secret_key_length: usize,
+    other_user_public_key: *const c_uchar,
+    other_user_public_key_length: usize,
+) -> x25519SharedSecretResult {
+    let secret_key_slice =
+        unsafe { std::slice::from_raw_parts(secret_key, secret_key_length) }.to_vec();
+    let other_user_public_key =
+        unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) }
+            .to_vec();
+    let mut result =
+        <X25519 as CASKeyExchange>::diffie_hellman_threadpool(secret_key_slice, other_user_public_key);
+    let capacity = result.capacity();
+    result.reserve_exact(capacity);
+    let return_result = x25519SharedSecretResult {
+        shared_secret: result.as_mut_ptr(),
+        shared_secret_length: result.len(),
+    };
+    std::mem::forget(result);
+    return_result
 }
