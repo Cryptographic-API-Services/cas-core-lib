@@ -1,9 +1,5 @@
-use std::{ffi::{c_char, CStr, CString},  sync::mpsc};
-
-use scrypt::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Scrypt,
-};
+use std::ffi::{c_char, CStr, CString};
+use cas_lib::password_hashers::{cas_password_hasher::CASPasswordHasher, scrypt::CASScrypt};
 
 #[no_mangle]
 pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
@@ -13,14 +9,10 @@ pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
         CStr::from_ptr(pass_to_hash)
     }
     .to_str()
-    .unwrap();
-
-    let salt = SaltString::generate(&mut OsRng);
-    let hashed = Scrypt
-        .hash_password(string_pass.as_bytes(), &salt)
-        .unwrap()
-        .to_string();
-    return CString::new(hashed).unwrap().into_raw();
+    .unwrap()
+    .to_string();
+    let new_hash = <CASScrypt as CASPasswordHasher>::hash_password(string_pass);
+    return CString::new(new_hash).unwrap().into_raw();
 }
 
 #[test]
@@ -43,18 +35,10 @@ pub extern "C" fn scrypt_hash_threadpool(pass_to_hash: *const c_char) -> *mut c_
         CStr::from_ptr(pass_to_hash)
     }
     .to_str()
-    .unwrap();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let salt = SaltString::generate(&mut OsRng);
-        let hashed = Scrypt
-            .hash_password(string_pass.as_bytes(), &salt)
-            .unwrap()
-            .to_string();
-        sender.send(hashed);
-    });
-    let result = CString::new(receiver.recv().unwrap()).unwrap().into_raw();
-    result
+    .unwrap()
+    .to_string();
+    let new_hash = <CASScrypt as CASPasswordHasher>::hash__password_threadpool(string_pass);
+    return CString::new(new_hash).unwrap().into_raw();
 }
 
 #[test]
@@ -80,7 +64,8 @@ pub extern "C" fn scrypt_verify(
         CStr::from_ptr(pass_to_check)
     }
     .to_str()
-    .unwrap();
+    .unwrap()
+    .to_string();
 
     let string_hash = unsafe {
         assert!(!hash_to_check.is_null());
@@ -88,12 +73,10 @@ pub extern "C" fn scrypt_verify(
         CStr::from_ptr(hash_to_check)
     }
     .to_str()
-    .unwrap();
+    .unwrap()
+    .to_string();
 
-    let parsed_hash = PasswordHash::new(&string_hash).unwrap();
-    return Scrypt
-        .verify_password(string_pass.as_bytes(), &parsed_hash)
-        .is_ok();
+    return <CASScrypt as CASPasswordHasher>::verify_password(string_hash, string_pass);
 }
 
 #[test]
@@ -121,7 +104,8 @@ pub extern "C" fn scrypt_verify_threadpool(
         CStr::from_ptr(pass_to_check)
     }
     .to_str()
-    .unwrap();
+    .unwrap()
+    .to_string();
 
     let string_hash = unsafe {
         assert!(!hash_to_check.is_null());
@@ -129,17 +113,10 @@ pub extern "C" fn scrypt_verify_threadpool(
         CStr::from_ptr(hash_to_check)
     }
     .to_str()
-    .unwrap();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let parsed_hash = PasswordHash::new(&string_hash).unwrap();
-        let thread_result = Scrypt
-            .verify_password(string_pass.as_bytes(), &parsed_hash)
-            .is_ok();
-        sender.send(thread_result);
-    });
-    let result = receiver.recv().unwrap();
-    result
+    .unwrap()
+    .to_string();
+    
+    return <CASScrypt as CASPasswordHasher>::verify_password(string_hash, string_pass);
 }
 
 #[test]

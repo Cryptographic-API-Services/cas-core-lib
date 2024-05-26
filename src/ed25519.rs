@@ -1,10 +1,5 @@
-extern crate ed25519_dalek;
-extern crate rand;
-
-use ed25519_dalek::Signer;
-use ed25519_dalek::{Keypair, PublicKey, Signature, Verifier};
+use cas_lib::signatures::ed25519::{ed25519_sign_with_key_pair, ed25519_sign_with_key_pair_threadpool, ed25519_verify_with_key_pair, ed25519_verify_with_key_pair_threadpool, ed25519_verify_with_public_key, ed25519_verify_with_public_key_threadpool, get_ed25519_key_pair, get_ed25519_key_pair_threadpool};
 use libc::c_uchar;
-use rand_07::rngs::OsRng;
 
 #[repr(C)]
 pub struct Ed25519KeyPairBytesResult {
@@ -22,20 +17,30 @@ pub struct Ed25519ByteSignatureResult {
 
 #[no_mangle]
 pub extern "C" fn get_ed25519_key_pair_bytes() -> Ed25519KeyPairBytesResult {
-    let mut csprng = OsRng {};
-    let keypair = Keypair::generate(&mut csprng);
-    let keypair_bytes = keypair.to_bytes();
-    return unsafe {
-        let size_of_result = std::mem::size_of_val(&keypair_bytes);
-        let result_raw_ptr = libc::malloc(size_of_result) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(keypair_bytes.as_ptr(), result_raw_ptr, size_of_result);
-        let result = Ed25519KeyPairBytesResult {
-            length: size_of_result,
-            key_pair: result_raw_ptr,
-        };
-        result
+    let mut keypair = get_ed25519_key_pair();
+    let capacity = keypair.capacity();
+    keypair.reserve_exact(capacity);
+    let result = Ed25519KeyPairBytesResult {
+        length: keypair.len(),
+        key_pair: keypair.as_mut_ptr(),
     };
+    std::mem::forget(keypair);
+    result
 }
+
+#[no_mangle]
+pub extern "C" fn get_ed25519_key_pair_bytes_threadpool() -> Ed25519KeyPairBytesResult {
+    let mut keypair = get_ed25519_key_pair_threadpool();
+    let capacity = keypair.capacity();
+    keypair.reserve_exact(capacity);
+    let result = Ed25519KeyPairBytesResult {
+        length: keypair.len(),
+        key_pair: keypair.as_mut_ptr(),
+    };
+    std::mem::forget(keypair);
+    result
+}
+
 
 #[test]
 fn get_ed25519_key_pair_bytes_test() {
@@ -54,38 +59,64 @@ pub extern "C" fn sign_with_key_pair_bytes(
     let key_pair_slice = unsafe {
         assert!(!key_pair.is_null());
         std::slice::from_raw_parts(key_pair, key_pair_length)
-    };
+    }
+    .to_vec();
     let message_to_sign_slice = unsafe {
         assert!(!message_to_sign.is_null());
         std::slice::from_raw_parts(message_to_sign, message_to_sign_length)
+    }
+    .to_vec();
+    let result = ed25519_sign_with_key_pair(key_pair_slice, message_to_sign_slice);
+    let mut public_key = result.public_key;
+    let public_key_capacity = public_key.capacity();
+    public_key.reserve_exact(public_key_capacity);
+    let mut signature = result.signature;
+    let siganture_capacity = signature.capacity();
+    signature.reserve_exact(siganture_capacity);
+    let result = Ed25519ByteSignatureResult {
+        signature_byte_ptr: signature.as_mut_ptr(),
+        signature_length: signature.len(),
+        public_key: public_key.as_mut_ptr(),
+        public_key_length: public_key.len(),
     };
-    let keypair = Keypair::from_bytes(key_pair_slice).unwrap();
-    let signature = keypair.sign(&message_to_sign_slice);
-    let signature_bytes = signature.to_bytes();
-    let public_keypair_bytes = keypair.public.to_bytes();
-    return unsafe {
-        let size_of_signature = std::mem::size_of_val(&signature_bytes);
-        let signature_raw_ptr = libc::malloc(size_of_signature) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(
-            signature_bytes.as_ptr(),
-            signature_raw_ptr,
-            size_of_signature,
-        );
-        let size_of_public_key = std::mem::size_of_val(&public_keypair_bytes);
-        let public_key_raw_ptr = libc::malloc(size_of_public_key) as *mut c_uchar;
-        std::ptr::copy_nonoverlapping(
-            public_keypair_bytes.as_ptr(),
-            public_key_raw_ptr,
-            size_of_public_key,
-        );
-        let result = Ed25519ByteSignatureResult {
-            signature_byte_ptr: signature_raw_ptr,
-            signature_length: size_of_signature,
-            public_key: public_key_raw_ptr,
-            public_key_length: size_of_public_key,
-        };
-        result
+    std::mem::forget(public_key);
+    std::mem::forget(signature);
+    result
+}
+
+#[no_mangle]
+pub extern "C" fn sign_with_key_pair_bytes_threadpool(
+    key_pair: *const c_uchar,
+    key_pair_length: usize,
+    message_to_sign: *const c_uchar,
+    message_to_sign_length: usize,
+) -> Ed25519ByteSignatureResult {
+    let key_pair_slice = unsafe {
+        assert!(!key_pair.is_null());
+        std::slice::from_raw_parts(key_pair, key_pair_length)
+    }
+    .to_vec();
+    let message_to_sign_slice = unsafe {
+        assert!(!message_to_sign.is_null());
+        std::slice::from_raw_parts(message_to_sign, message_to_sign_length)
+    }
+    .to_vec();
+    let result = ed25519_sign_with_key_pair_threadpool(key_pair_slice, message_to_sign_slice);
+    let mut public_key = result.public_key;
+    let public_key_capacity = public_key.capacity();
+    public_key.reserve_exact(public_key_capacity);
+    let mut signature = result.signature;
+    let siganture_capacity = signature.capacity();
+    signature.reserve_exact(siganture_capacity);
+    let result = Ed25519ByteSignatureResult {
+        signature_byte_ptr: signature.as_mut_ptr(),
+        signature_length: signature.len(),
+        public_key: public_key.as_mut_ptr(),
+        public_key_length: public_key.len(),
     };
+    std::mem::forget(public_key);
+    std::mem::forget(signature);
+    result
 }
 
 #[test]
@@ -117,19 +148,40 @@ pub extern "C" fn verify_with_key_pair_bytes(
     let key_pair_slice = unsafe {
         assert!(!key_pair.is_null());
         std::slice::from_raw_parts(key_pair, key_pair_length)
-    };
+    }.to_vec();
     let signature_slice = unsafe {
         assert!(!signature.is_null());
         std::slice::from_raw_parts(signature, signature_length)
-    };
+    }.to_vec();
     let message_slice = unsafe {
         assert!(!message.is_null());
         std::slice::from_raw_parts(message, message_length)
-    };
-    let keypair = Keypair::from_bytes(&key_pair_slice).unwrap();
-    let public_key = keypair.public;
-    let signature = Signature::from_bytes(&signature_slice).unwrap();
-    return public_key.verify(&message_slice, &signature).is_ok();
+    }.to_vec();
+    return ed25519_verify_with_key_pair(key_pair_slice, signature_slice, message_slice);
+}
+
+#[no_mangle]
+pub extern "C" fn verify_with_key_pair_bytes_threadpool(
+    key_pair: *const c_uchar,
+    key_pair_length: usize,
+    signature: *const c_uchar,
+    signature_length: usize,
+    message: *const c_uchar,
+    message_length: usize,
+) -> bool {
+    let key_pair_slice = unsafe {
+        assert!(!key_pair.is_null());
+        std::slice::from_raw_parts(key_pair, key_pair_length)
+    }.to_vec();
+    let signature_slice = unsafe {
+        assert!(!signature.is_null());
+        std::slice::from_raw_parts(signature, signature_length)
+    }.to_vec();
+    let message_slice = unsafe {
+        assert!(!message.is_null());
+        std::slice::from_raw_parts(message, message_length)
+    }.to_vec();
+    return ed25519_verify_with_key_pair_threadpool(key_pair_slice, signature_slice, message_slice);
 }
 
 #[test]
@@ -165,20 +217,40 @@ pub extern "C" fn verify_with_public_key_bytes(
     let public_key_slice = unsafe {
         assert!(!public_key.is_null());
         std::slice::from_raw_parts(public_key, public_key_length)
-    };
+    }.to_vec();
     let signature_slice = unsafe {
         assert!(!signature.is_null());
         std::slice::from_raw_parts(signature, signature_length)
-    };
+    }.to_vec();
     let message_slice = unsafe {
         assert!(!message.is_null());
         std::slice::from_raw_parts(message, message_length)
-    };
-    let public_key_parsed = PublicKey::from_bytes(&public_key_slice).unwrap();
-    let signature_parsed = Signature::from_bytes(&signature_slice).unwrap();
-    return public_key_parsed
-        .verify(&message_slice, &signature_parsed)
-        .is_ok();
+    }.to_vec();
+    return ed25519_verify_with_public_key(public_key_slice, signature_slice, message_slice);
+}
+
+#[no_mangle]
+pub extern "C" fn verify_with_public_key_bytes_threadpool(
+    public_key: *const c_uchar,
+    public_key_length: usize,
+    signature: *const c_uchar,
+    signature_length: usize,
+    message: *const c_uchar,
+    message_length: usize,
+) -> bool {
+    let public_key_slice = unsafe {
+        assert!(!public_key.is_null());
+        std::slice::from_raw_parts(public_key, public_key_length)
+    }.to_vec();
+    let signature_slice = unsafe {
+        assert!(!signature.is_null());
+        std::slice::from_raw_parts(signature, signature_length)
+    }.to_vec();
+    let message_slice = unsafe {
+        assert!(!message.is_null());
+        std::slice::from_raw_parts(message, message_length)
+    }.to_vec();
+    return ed25519_verify_with_public_key_threadpool(public_key_slice, signature_slice, message_slice);
 }
 
 #[test]

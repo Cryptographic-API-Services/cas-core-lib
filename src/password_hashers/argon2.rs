@@ -1,33 +1,24 @@
-use std::{
-    ffi::{c_char, CStr, CString}, sync::mpsc
-};
-use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
-    Argon2,
-};
+use std::ffi::{c_char, CStr, CString};
+use cas_lib::password_hashers::{argon2::CASArgon, cas_password_hasher::CASPasswordHasher};
 
 #[no_mangle]
 pub extern "C" fn argon2_verify(hashed_pass: *const c_char, password: *const c_char) -> bool {
-    let hashed_pass_string = unsafe {
+    let hashed_password = unsafe {
         assert!(!hashed_pass.is_null());
         CStr::from_ptr(hashed_pass)
     }
     .to_str()
-    .unwrap();
+    .unwrap()
+    .to_string();
 
-    let password_string = unsafe {
+    let password_to_verify = unsafe {
         assert!(!password.is_null());
         CStr::from_ptr(password)
     }
     .to_str()
     .unwrap()
-    .as_bytes();
-
-    let parsed_hash = PasswordHash::new(&hashed_pass_string).unwrap();
-    let result = Argon2::default()
-        .verify_password(password_string, &parsed_hash)
-        .is_ok();
-    return result;
+    .to_string();
+    return <CASArgon as CASPasswordHasher>::verify_password(hashed_password, password_to_verify);
 }
 
 #[test]
@@ -69,7 +60,8 @@ pub extern "C" fn argon2_verify_threadpool(hashed_pass: *const c_char, password:
         CStr::from_ptr(hashed_pass)
     }
     .to_str()
-    .unwrap();
+    .unwrap()
+    .to_string();
 
     let password_string = unsafe {
         assert!(!password.is_null());
@@ -77,16 +69,8 @@ pub extern "C" fn argon2_verify_threadpool(hashed_pass: *const c_char, password:
     }
     .to_str()
     .unwrap()
-    .as_bytes();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let parsed_hash = PasswordHash::new(&hashed_pass_string).unwrap();
-        let thread_result = Argon2::default()
-            .verify_password(password_string, &parsed_hash)
-            .is_ok();
-        sender.send(thread_result);
-    });
-    let result = receiver.recv().unwrap();
+    .to_string();
+    let result: bool = <CASArgon as CASPasswordHasher>::verify_password_threadpool(hashed_pass_string, password_string);
     result
 }
 
@@ -106,18 +90,15 @@ fn argon2_verify_threadpool_test() {
 
 #[no_mangle]
 pub extern "C" fn argon2_hash(pass_to_hash: *const c_char) -> *mut c_char {
-    let pass_bytes = unsafe {
+    let password = unsafe {
         assert!(!pass_to_hash.is_null());
         CStr::from_ptr(pass_to_hash)
     }
     .to_str()
     .unwrap()
-    .as_bytes();
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    let password_hash = CString::new(argon2.hash_password(pass_bytes, &salt).unwrap().to_string())
-        .unwrap()
-        .into_raw();
+    .to_string();
+    let new_hash = <CASArgon as CASPasswordHasher>::hash_password(password);
+    let password_hash = CString::new(new_hash).unwrap().into_raw();
     return password_hash;
 }
 
@@ -135,21 +116,15 @@ fn argon2_hash_test() {
 
 #[no_mangle]
 pub extern "C" fn argon2_hash_threadpool(pass_to_hash: *const c_char) -> *mut c_char {
-    let pass_bytes = unsafe {
+    let password = unsafe {
         assert!(!pass_to_hash.is_null());
         CStr::from_ptr(pass_to_hash)
     }
     .to_str()
     .unwrap()
-    .as_bytes();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let salt = SaltString::generate(&mut OsRng);
-        let argon2 = Argon2::default();
-        let password_hash = argon2.hash_password(pass_bytes, &salt).unwrap().to_string();
-        sender.send(password_hash);
-    });
-    let result = CString::new(receiver.recv().unwrap()).unwrap().into_raw();
+    .to_string();
+    let new_hash = <CASArgon as CASPasswordHasher>::hash__password_threadpool(password);
+    let result = CString::new(new_hash).unwrap().into_raw();
     result
 }
 
