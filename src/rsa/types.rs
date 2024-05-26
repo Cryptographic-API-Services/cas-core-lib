@@ -1,9 +1,4 @@
 use std::ffi::{c_char, c_uchar};
-use rsa::{RsaPrivateKey, RsaPublicKey};
-pub struct RsaKeyGenerationThreadPool {
-    pub private_key: RsaPrivateKey,
-    pub public_key: RsaPublicKey
-}
 
 #[repr(C)]
 pub struct RsaKeyPair {

@@ -37,12 +37,7 @@ pub extern "C" fn blake2_512_bytes_threadpool(
         std::slice::from_raw_parts(data, data_length)
     }
     .to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let thread_result: Vec<u8> = <CASBlake2 as CASHasher>::hash_512(data_slice);
-        sender.send(thread_result);
-    });
-    let mut result = receiver.recv().unwrap();
+    let mut result: Vec<u8> = <CASBlake2 as CASHasher>::hash_512_threadpool(data_slice);
     let capacity = result.capacity();
     result.reserve_exact(capacity);
     let return_result = Blake2HashByteResult {
@@ -100,13 +95,8 @@ pub extern "C" fn blake2_512_bytes_verify_threadpool(
         std::slice::from_raw_parts(to_compare, to_compare_length)
     }
     .to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let thread_result: bool =
-            <CASBlake2 as CASHasher>::verify_512(data_slice, to_compare_slice);
-        sender.send(thread_result);
-    });
-    let result = receiver.recv().unwrap();
+    let result: bool =
+        <CASBlake2 as CASHasher>::verify_512_threadpool(data_slice, to_compare_slice);
     result
 }
 
@@ -128,7 +118,7 @@ pub extern "C" fn blake2_256_bytes(
         length: result.len(),
     };
     std::mem::forget(result);
-    return return_result
+    return return_result;
 }
 
 #[no_mangle]
@@ -141,12 +131,7 @@ pub extern "C" fn blake2_256_bytes_threadpool(
         std::slice::from_raw_parts(data_to_hash, data_to_hash_length)
     }
     .to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let result = <CASBlake2 as CASHasher>::hash_256(data_to_hash_slice);
-        sender.send(result);
-    });
-    let mut result = receiver.recv().unwrap();
+    let mut result = <CASBlake2 as CASHasher>::hash_256_threadpool(data_to_hash_slice);
     let capacity = result.capacity();
     result.reserve_exact(capacity);
     let return_result = Blake2HashByteResult {
@@ -206,12 +191,7 @@ pub extern "C" fn blake2_256_bytes_verify_threadpool(
         std::slice::from_raw_parts(to_compare, to_compare_length)
     }
     .to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let result = <CASBlake2 as CASHasher>::verify_256(data_slice, to_compare_slice);
-        sender.send(result);
-    });
-    let result = receiver.recv().unwrap();
+    let result = <CASBlake2 as CASHasher>::verify_256_threadpool(data_slice, to_compare_slice);
     result
 }
 

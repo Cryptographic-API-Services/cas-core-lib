@@ -16,14 +16,8 @@ crate-type = ["dylib"]
 base64 = "0.20.0"
 rand = "0.8.5"
 rand_07 = { package = "rand", version = "0.7.0" }
-rsa = "0.7.2"
-sha3 = "0.10.6"
-hmac = "0.12.1"
-sha2 = "0.10.6"
 libc = "0.2.146"
-rayon = "1.8.0"
 x25519-dalek = {version = "2.0.0", features = ["static_secrets"]}
-ascon-aead = "0.4.2"
 cas-lib = {path = "../cas-lib"}
 
 [profile.dev.package.num-bigint-dig]

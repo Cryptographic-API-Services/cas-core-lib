@@ -1,5 +1,4 @@
 use cas_lib::key_exchange::{cas_key_exchange::CASKeyExchange, x25519::X25519};
-use rsa::rand_core::OsRng;
 use std::ffi::c_uchar;
 use x25519_dalek::{PublicKey, StaticSecret};
 

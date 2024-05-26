@@ -1,15 +1,11 @@
 use std::sync::mpsc;
 
 use cas_lib::message::{cas_hmac::CASHMAC, hmac::HMAC};
-use hmac::{Hmac, Mac};
 use libc::c_uchar;
-use sha2::Sha256;
 
 use self::types::HmacSignByteResult;
 
 mod types;
-
-type HmacSha256 = Hmac<Sha256>;
 
 #[no_mangle]
 pub extern "C" fn hmac_sign_bytes(

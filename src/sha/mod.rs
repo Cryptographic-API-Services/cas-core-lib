@@ -2,7 +2,6 @@ use core::slice;
 use std::{ffi::c_uchar, sync::mpsc};
 
 use cas_lib::hashers::{cas_hasher::CASHasher, sha::CASSHA};
-use sha3::{Digest, Sha3_256, Sha3_512};
 
 use self::types::SHAHashByteResult;
 mod types;
@@ -29,12 +28,7 @@ pub extern "C" fn sha512_bytes_threadpool(
 ) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
     let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let mut result = <CASSHA as CASHasher>::hash_512(data_to_hash_slice);
-        sender.send(result);
-    });
-    let mut result = receiver.recv().unwrap();
+    let mut result = <CASSHA as CASHasher>::hash_512_threadpool(data_to_hash_slice);
     let capacity = result.capacity();
     result.reserve_exact(capacity);
     let return_result = SHAHashByteResult {
@@ -73,12 +67,8 @@ pub extern "C" fn sha512_bytes_verify_threadpool(
     let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let data_to_verify_slice =
         unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let result = <CASSHA as CASHasher>::verify_512(data_to_verify_slice, data_to_hash_slice);
-        sender.send(result);
-    });
-    let result = receiver.recv().unwrap();
+    let result =
+        <CASSHA as CASHasher>::verify_512_threadpool(data_to_verify_slice, data_to_hash_slice);
     result
 }
 
@@ -115,12 +105,7 @@ pub extern "C" fn sha256_bytes_threadpool(
 ) -> SHAHashByteResult {
     assert!(!data_to_hash.is_null());
     let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let mut result = <CASSHA as CASHasher>::hash_256(data_to_hash_slice);
-        sender.send(result);
-    });
-    let mut result = receiver.recv().unwrap();
+    let mut result = <CASSHA as CASHasher>::hash_256_threadpool(data_to_hash_slice);
     let capacity = result.capacity();
     result.reserve_exact(capacity);
     let return_result = SHAHashByteResult {
@@ -159,12 +144,7 @@ pub extern "C" fn sha256_bytes_verify_threadpool(
     let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
     let data_to_verify_slice =
         unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
-    let (sender, receiver) = mpsc::channel();
-    rayon::spawn(move || {
-        let result = <CASSHA as CASHasher>::verify_256(data_to_verify_slice, data_to_hash_slice);
-        sender.send(result);
-    });
-    let result = receiver.recv().unwrap();
+    let result = <CASSHA as CASHasher>::verify_256_threadpool(data_to_verify_slice, data_to_hash_slice);
     result
 }
 

@@ -1,7 +1,4 @@
 use std::ffi::{c_char, c_uchar, CStr, CString};
-
-use ascon_aead::aead::{generic_array::GenericArray, Aead, AeadCore, KeyInit, OsRng};
-use ascon_aead::Ascon128;
 use cas_lib::sponges::ascon_aead::AsconAead;
 use cas_lib::sponges::cas_ascon_aead::{CASAsconAead};
 
