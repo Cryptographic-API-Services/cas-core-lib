@@ -8,6 +8,7 @@ mod rsa;
 mod sha;
 mod x25519;
 mod ascon_aead;
+mod zstd;
 
 pub mod password_hashers {
     pub mod argon2;
