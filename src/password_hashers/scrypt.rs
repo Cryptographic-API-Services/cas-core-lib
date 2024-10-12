@@ -55,22 +55,22 @@ fn scrypt_hash_threadpool_test() {
 
 #[no_mangle]
 pub extern "C" fn scrypt_verify(
-    pass_to_check: *const c_char,
     hash_to_check: *const c_char,
+    pass_to_check: *const c_char,
 ) -> bool {
-    let string_pass = unsafe {
-        assert!(!pass_to_check.is_null());
-
-        CStr::from_ptr(pass_to_check)
+    let string_hash = unsafe {
+        assert!(!hash_to_check.is_null());
+    
+        CStr::from_ptr(hash_to_check)
     }
     .to_str()
     .unwrap()
     .to_string();
 
-    let string_hash = unsafe {
-        assert!(!hash_to_check.is_null());
+    let string_pass = unsafe {
+        assert!(!pass_to_check.is_null());
 
-        CStr::from_ptr(hash_to_check)
+        CStr::from_ptr(pass_to_check)
     }
     .to_str()
     .unwrap()
