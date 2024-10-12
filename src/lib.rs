@@ -9,6 +9,7 @@ mod sha;
 mod x25519;
 mod ascon_aead;
 mod zstd;
+mod hpke;
 
 pub mod password_hashers {
     pub mod argon2;
