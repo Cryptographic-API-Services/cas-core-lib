@@ -5,5 +5,7 @@ pub struct HpkeKeyPair {
     pub private_key_ptr: *mut c_uchar,
     pub private_key_ptr_length: usize,
     pub public_key_ptr: *mut c_uchar,
-    pub public_key_ptr_length: usize
+    pub public_key_ptr_length: usize,
+    pub info_str_ptr: *mut c_uchar,
+    pub info_str_ptr_length: usize
 }
