@@ -19,3 +19,9 @@ pub struct HpkeEncrypt {
     pub tag_ptr: *mut c_uchar,
     pub tag_ptr_length: usize
 }
+
+#[repr(C)]
+pub struct HpkeDecrypt {
+    pub plaintext_ptr: *mut c_uchar,
+    pub plaintext_ptr_length: usize
+}
