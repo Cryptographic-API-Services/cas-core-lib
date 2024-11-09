@@ -89,7 +89,7 @@ fn scrypt_verify_test() {
     let hash_ctr = unsafe { CString::from_raw(hash) };
     let hashed_bytes = hash_ctr.as_bytes_with_nul();
     let hashed_ptr = hashed_bytes.as_ptr() as *const i8;
-    let is_valid = scrypt_verify(password_ptr, hashed_ptr);
+    let is_valid = scrypt_verify(hashed_ptr, password_ptr);
     assert_eq!(true, is_valid);
 }
 
