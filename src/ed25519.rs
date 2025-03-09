@@ -129,9 +129,9 @@ pub extern "C" fn sign_with_key_pair_bytes_threadpool(
         ptr
     };
     let result = Ed25519ByteSignatureResult {
-        signature_byte_ptr: public_key_pointer,
+        signature_byte_ptr: signature_pointer,
         signature_length: signature.len(),
-        public_key: signature_pointer,
+        public_key: public_key_pointer,
         public_key_length: public_key.len(),
     };
     result
