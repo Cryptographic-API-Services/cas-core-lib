@@ -18,7 +18,7 @@ pub extern "C" fn argon2_verify(hashed_pass: *const c_char, password: *const c_c
     .to_str()
     .unwrap()
     .to_string();
-    return <CASArgon as CASPasswordHasher>::verify_password(hashed_password, password_to_verify);
+    return CASArgon::verify_password(hashed_password, password_to_verify);
 }
 
 #[test]
@@ -52,7 +52,7 @@ pub extern "C" fn argon2_verify_threadpool(hashed_pass: *const c_char, password:
     .to_str()
     .unwrap()
     .to_string();
-    let result: bool = <CASArgon as CASPasswordHasher>::verify_password_threadpool(hashed_pass_string, password_string);
+    let result: bool = CASArgon::verify_password_threadpool(hashed_pass_string, password_string);
     result
 }
 
@@ -79,7 +79,7 @@ pub extern "C" fn argon2_hash(pass_to_hash: *const c_char) -> *mut c_char {
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = <CASArgon as CASPasswordHasher>::hash_password(password);
+    let new_hash = CASArgon::hash_password(password);
     let password_hash = CString::new(new_hash).unwrap().into_raw();
     return password_hash;
 }
@@ -105,7 +105,7 @@ pub extern "C" fn argon2_hash_threadpool(pass_to_hash: *const c_char) -> *mut c_
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = <CASArgon as CASPasswordHasher>::hash__password_threadpool(password);
+    let new_hash = CASArgon::hash_password_threadpool(password);
     let result = CString::new(new_hash).unwrap().into_raw();
     result
 }
