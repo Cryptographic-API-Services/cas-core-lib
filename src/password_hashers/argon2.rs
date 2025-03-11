@@ -4,7 +4,7 @@ use cas_lib::password_hashers::argon2::CASArgon;
 use super::types::Argon2KDFAes128;
 
 #[no_mangle]
-pub extern "C" fn argon2_derive_aes_128_key(hashed_password: *const c_char) -> [u8] {
+pub extern "C" fn argon2_derive_aes_128_key(hashed_password: *const c_char) -> Argon2KDFAes128{
     let hashed_password_bytes = unsafe {
         assert!(!hashed_password.is_null());
         CStr::from_ptr(hashed_password)
