@@ -1,5 +1,51 @@
 use std::ffi::{c_char, CStr, CString};
-use cas_lib::password_hashers::{argon2::CASArgon, cas_password_hasher::CASPasswordHasher};
+use cas_lib::password_hashers::argon2::CASArgon;
+
+use super::types::Argon2KDFAes128;
+
+#[no_mangle]
+pub extern "C" fn argon2_derive_aes_128_key(hashed_password: *const c_char) -> [u8] {
+    let hashed_password_bytes = unsafe {
+        assert!(!hashed_password.is_null());
+        CStr::from_ptr(hashed_password)
+    }
+    .to_str()
+    .unwrap()
+    .as_bytes();
+    let key: [u8; 16] = CASArgon::derive_aes_128_key(hashed_password_bytes);
+    let key_ptr = unsafe {
+        let ptr = libc::malloc(key.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(key.as_ptr(), ptr, key.len());
+        ptr
+    };
+    let result = Argon2KDFAes128 {
+        key: key_ptr,
+        length: key.len()
+    };
+    result
+}
+
+#[no_mangle]
+pub extern "C" fn argon2_derive_aes_256_key(hashed_password: *const c_char) -> Argon2KDFAes128 {
+    let hashed_password_bytes = unsafe {
+        assert!(!hashed_password.is_null());
+        CStr::from_ptr(hashed_password)
+    }
+    .to_str()
+    .unwrap()
+    .as_bytes();
+    let key: [u8; 32] = CASArgon::derive_aes_256_key(hashed_password_bytes);
+    let key_ptr = unsafe {
+        let ptr = libc::malloc(key.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(key.as_ptr(), ptr, key.len());
+        ptr
+    };
+    let result = Argon2KDFAes128 {
+        key: key_ptr,
+        length: key.len()
+    };
+    result
+}
 
 #[no_mangle]
 pub extern "C" fn argon2_verify(hashed_pass: *const c_char, password: *const c_char) -> bool {
