@@ -116,12 +116,22 @@ pub extern "C" fn sign_with_key_pair_bytes_threadpool(
         std::slice::from_raw_parts(message_to_sign, message_to_sign_length)
     };
     let result = ed25519_sign_with_key_pair_threadpool(key_pair_slice, message_to_sign_slice);
-    let mut public_key = result.public_key;
-    let mut signature = result.signature;
+    let public_key = result.public_key;
+    let signature = result.signature;
+    let public_key_pointer = unsafe {
+        let ptr = libc::malloc(public_key.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(public_key.as_ptr(), ptr, public_key.len());
+        ptr
+    };
+    let signature_pointer = unsafe {
+        let ptr = libc::malloc(signature.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(signature.as_ptr(), ptr, signature.len());
+        ptr
+    };
     let result = Ed25519ByteSignatureResult {
-        signature_byte_ptr: signature.as_mut_ptr(),
+        signature_byte_ptr: signature_pointer,
         signature_length: signature.len(),
-        public_key: public_key.as_mut_ptr(),
+        public_key: public_key_pointer,
         public_key_length: public_key.len(),
     };
     result
@@ -195,7 +205,7 @@ pub extern "C" fn verify_with_key_pair_bytes_threadpool(
     };
     let signature_slice = unsafe {
         assert!(!signature.is_null());
-        assert!(key_pair_length == 64, "Signature length must be 64 bytes");
+        assert!(signature_length == 64, "Signature length must be 64 bytes");
         let slice = std::slice::from_raw_parts(signature, signature_length);
         let mut array = [0u8; 64];
         array.copy_from_slice(slice);
@@ -280,7 +290,7 @@ pub extern "C" fn verify_with_public_key_bytes_threadpool(
     };
     let signature_slice: [u8; 64] = unsafe {
         assert!(!signature.is_null());
-        assert!(public_key_length == 64, "Signature Slice must be 32 bytes");
+        assert!(signature_length == 64, "Signature Slice must be 32 bytes");
         let slice = std::slice::from_raw_parts(signature, signature_length);
         let mut array = [0u8; 64];
         array.copy_from_slice(slice);

@@ -355,18 +355,18 @@ pub extern "C" fn sha256_ed25519_digital_signature(
         <SHA256ED25519DigitalSignature as ED25519DigitalSignature>::digital_signature_ed25519(
             data_to_sign_slice,
         );
-        let public_key = result.public_key;
-        let public_key_pair_ptr = unsafe {
-            let ptr = libc::malloc(public_key.len()) as *mut u8;
-            std::ptr::copy_nonoverlapping(public_key.as_ptr(), ptr, public_key.len());
-            ptr
-        };
-        let signature = result.signature;
-        let signature_ptr = unsafe {
-            let ptr = libc::malloc(signature.len()) as *mut u8;
-            std::ptr::copy_nonoverlapping(signature.as_ptr(), ptr, signature.len());
-            ptr
-        };
+    let public_key = result.public_key;
+    let public_key_pair_ptr = unsafe {
+        let ptr = libc::malloc(public_key.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(public_key.as_ptr(), ptr, public_key.len());
+        ptr
+    };
+    let signature = result.signature;
+    let signature_ptr = unsafe {
+        let ptr = libc::malloc(signature.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(signature.as_ptr(), ptr, signature.len());
+        ptr
+    };
     let result = SHAED25519DalekDigitalSignatureResult {
         public_key: public_key_pair_ptr,
         public_key_length: public_key.len(),
@@ -389,16 +389,24 @@ pub extern "C" fn sha256_ed25519_digital_signature_threadpool(
         <SHA256ED25519DigitalSignature as ED25519DigitalSignature>::digital_signature_ed25519_threadpool(
             data_to_sign_slice,
         );
-    let mut public_key = result.public_key;
-    let mut signature = result.signature;
+    let public_key = result.public_key;
+    let public_key_pair_ptr = unsafe {
+        let ptr = libc::malloc(public_key.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(public_key.as_ptr(), ptr, public_key.len());
+        ptr
+    };
+    let signature = result.signature;
+    let signature_ptr = unsafe {
+        let ptr = libc::malloc(signature.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(signature.as_ptr(), ptr, signature.len());
+        ptr
+    };
     let result = SHAED25519DalekDigitalSignatureResult {
-        public_key: public_key.as_mut_ptr(),
+        public_key: public_key_pair_ptr,
         public_key_length: public_key.len(),
-        signature_raw_ptr: signature.as_mut_ptr(),
+        signature_raw_ptr: signature_ptr,
         signature_length: signature.len(),
     };
-    std::mem::forget(public_key);
-    std::mem::forget(signature);
     result
 }
 
@@ -425,7 +433,7 @@ pub extern "C" fn sha512_ed25519_digital_signature_verify(
     };
     let signature_slice = unsafe {
         assert!(!signature.is_null());
-        assert!(public_key_length == 64, "Signature must be 64 key bytes");
+        assert!(signature_length == 64, "Signature must be 64 key bytes");
         let slice = std::slice::from_raw_parts(signature, signature_length);
         let mut array = [0u8; 64];
         array.copy_from_slice(slice);
@@ -458,7 +466,7 @@ pub extern "C" fn sha512_ed25519_digital_signature_verify_threadpool(
     };
     let signature_slice = unsafe {
         assert!(!signature.is_null());
-        assert!(public_key_length == 64, "Signature must be 64 key bytes");
+        assert!(signature_length == 64, "Signature must be 64 key bytes");
         let slice = std::slice::from_raw_parts(signature, signature_length);
         let mut array = [0u8; 64];
         array.copy_from_slice(slice);
