@@ -105,13 +105,10 @@ pub extern "C" fn diffie_hellman(
             .to_vec();
     let mut result =
         <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
     let return_result = x25519SharedSecretResult {
         shared_secret: result.as_mut_ptr(),
         shared_secret_length: result.len(),
     };
-    std::mem::forget(result);
     return_result
 }
 
@@ -129,12 +126,9 @@ pub extern "C" fn diffie_hellman_threadpool(
             .to_vec();
     let mut result =
         <X25519 as CASKeyExchange>::diffie_hellman_threadpool(secret_key_slice, other_user_public_key);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
     let return_result = x25519SharedSecretResult {
         shared_secret: result.as_mut_ptr(),
         shared_secret_length: result.len(),
     };
-    std::mem::forget(result);
     return_result
 }
