@@ -1,5 +1,45 @@
 use std::ffi::{c_char, CStr, CString};
-use cas_lib::password_hashers::{argon2::CASArgon, cas_password_hasher::CASPasswordHasher};
+use cas_lib::password_hashers::argon2::CASArgon;
+
+use super::types::Argon2KDFAes128;
+
+#[no_mangle]
+pub extern "C" fn argon2_derive_aes_128_key(hashed_password: *const c_char) -> Argon2KDFAes128 {
+    let hashed_password_bytes = unsafe {
+        assert!(!hashed_password.is_null());
+        CStr::from_ptr(hashed_password)
+    }.to_bytes().to_vec();
+    let key = CASArgon::derive_aes_128_key(hashed_password_bytes);
+    let key_ptr = unsafe {
+        let ptr = libc::malloc(key.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(key.as_ptr(), ptr, key.len());
+        ptr
+    };
+    let result = Argon2KDFAes128 {
+        key: key_ptr,
+        length: key.len()
+    };
+    result
+}
+
+#[no_mangle]
+pub extern "C" fn argon2_derive_aes_256_key(hashed_password: *const c_char) -> Argon2KDFAes128 {
+    let hashed_password_bytes = unsafe {
+        assert!(!hashed_password.is_null());
+        CStr::from_ptr(hashed_password)
+    }.to_bytes().to_vec();
+    let key = CASArgon::derive_aes_256_key(hashed_password_bytes);
+    let key_ptr = unsafe {
+        let ptr = libc::malloc(key.len()) as *mut u8;
+        std::ptr::copy_nonoverlapping(key.as_ptr(), ptr, key.len());
+        ptr
+    };
+    let result = Argon2KDFAes128 {
+        key: key_ptr,
+        length: key.len()
+    };
+    result
+}
 
 #[no_mangle]
 pub extern "C" fn argon2_verify(hashed_pass: *const c_char, password: *const c_char) -> bool {
@@ -18,7 +58,7 @@ pub extern "C" fn argon2_verify(hashed_pass: *const c_char, password: *const c_c
     .to_str()
     .unwrap()
     .to_string();
-    return <CASArgon as CASPasswordHasher>::verify_password(hashed_password, password_to_verify);
+    return CASArgon::verify_password(hashed_password, password_to_verify);
 }
 
 #[test]
@@ -52,7 +92,7 @@ pub extern "C" fn argon2_verify_threadpool(hashed_pass: *const c_char, password:
     .to_str()
     .unwrap()
     .to_string();
-    let result: bool = <CASArgon as CASPasswordHasher>::verify_password_threadpool(hashed_pass_string, password_string);
+    let result: bool = CASArgon::verify_password_threadpool(hashed_pass_string, password_string);
     result
 }
 
@@ -79,7 +119,7 @@ pub extern "C" fn argon2_hash(pass_to_hash: *const c_char) -> *mut c_char {
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = <CASArgon as CASPasswordHasher>::hash_password(password);
+    let new_hash = CASArgon::hash_password(password);
     let password_hash = CString::new(new_hash).unwrap().into_raw();
     return password_hash;
 }
@@ -105,7 +145,7 @@ pub extern "C" fn argon2_hash_threadpool(pass_to_hash: *const c_char) -> *mut c_
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = <CASArgon as CASPasswordHasher>::hash__password_threadpool(password);
+    let new_hash = CASArgon::hash_password_threadpool(password);
     let result = CString::new(new_hash).unwrap().into_raw();
     result
 }

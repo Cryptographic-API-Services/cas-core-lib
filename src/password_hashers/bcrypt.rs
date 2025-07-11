@@ -39,7 +39,7 @@ pub extern "C" fn bcrypt_hash_threadpool(pass_to_hash: *const c_char) -> *mut c_
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = <CASBCrypt as CASPasswordHasher>::hash__password_threadpool(string_pass);
+    let new_hash = CASBCrypt::hash_password_threadpool(string_pass);
     return CString::new(new_hash).unwrap().into_raw();
 }
 
