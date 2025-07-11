@@ -1,3 +1,7 @@
+use zeroizing_alloc::ZeroAlloc;
+
+#[global_allocator]
+static ALLOC: ZeroAlloc<std::alloc::System> = ZeroAlloc(std::alloc::System);
 mod aes;
 mod blake2;
 mod digital_signature;
