@@ -35,25 +35,6 @@ pub extern "C" fn generate_secret_and_public_key() -> x25519SecretPublicKeyResul
     result
 }
 
-#[no_mangle]
-pub extern "C" fn generate_secret_and_public_key_threadpool() -> x25519SecretPublicKeyResult {
-    let result = <X25519 as CASKeyExchange>::generate_secret_and_public_key_threadpool();
-    let mut secret_key = result.secret_key;
-    let mut public_key = result.public_key;
-    let secret_key_capacity = secret_key.capacity();
-    secret_key.reserve_exact(secret_key_capacity);
-    let public_key_capacity = public_key.capacity();
-    public_key.reserve_exact(public_key_capacity);
-    let result = x25519SecretPublicKeyResult {
-        secret_key: secret_key.as_mut_ptr(),
-        secret_key_length: secret_key.len(),
-        public_key: public_key.as_mut_ptr(),
-        public_key_length: public_key.len(),
-    };
-    std::mem::forget(public_key);
-    std::mem::forget(secret_key);
-    result
-}
 
 #[test]
 pub fn diffie_hellman_test() {
@@ -105,30 +86,6 @@ pub extern "C" fn diffie_hellman(
             .to_vec();
     let mut result =
         <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
-    let return_result = x25519SharedSecretResult {
-        shared_secret: result.as_mut_ptr(),
-        shared_secret_length: result.len(),
-    };
-    std::mem::forget(result);
-    return_result
-}
-
-#[no_mangle]
-pub extern "C" fn diffie_hellman_threadpool(
-    secret_key: *const c_uchar,
-    secret_key_length: usize,
-    other_user_public_key: *const c_uchar,
-    other_user_public_key_length: usize,
-) -> x25519SharedSecretResult {
-    let secret_key_slice =
-        unsafe { std::slice::from_raw_parts(secret_key, secret_key_length) }.to_vec();
-    let other_user_public_key =
-        unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) }
-            .to_vec();
-    let mut result =
-        <X25519 as CASKeyExchange>::diffie_hellman_threadpool(secret_key_slice, other_user_public_key);
     let capacity = result.capacity();
     result.reserve_exact(capacity);
     let return_result = x25519SharedSecretResult {
