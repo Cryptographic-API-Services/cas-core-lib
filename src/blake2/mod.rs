@@ -27,27 +27,6 @@ pub extern "C" fn blake2_512_bytes(
     return_result
 }
 
-#[no_mangle]
-pub extern "C" fn blake2_512_bytes_threadpool(
-    data: *const c_uchar,
-    data_length: usize,
-) -> Blake2HashByteResult {
-    let data_slice = unsafe {
-        assert!(!data.is_null());
-        std::slice::from_raw_parts(data, data_length)
-    }
-    .to_vec();
-    let mut result: Vec<u8> = <CASBlake2 as CASHasher>::hash_512_threadpool(data_slice);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
-    let return_result = Blake2HashByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
-        length: result.len(),
-    };
-    std::mem::forget(result);
-    return_result
-}
-
 #[test]
 fn blake2_512_bytes_test() {
     let data_to_hash = "Blake2512HashingTechnique";
@@ -79,28 +58,6 @@ pub extern "C" fn blake2_512_bytes_verify(
 }
 
 #[no_mangle]
-pub extern "C" fn blake2_512_bytes_verify_threadpool(
-    hashed_data: *const c_uchar,
-    hashed_data_length: usize,
-    to_compare: *const c_uchar,
-    to_compare_length: usize,
-) -> bool {
-    let data_slice = unsafe {
-        assert!(!hashed_data.is_null());
-        std::slice::from_raw_parts(hashed_data, hashed_data_length)
-    }
-    .to_vec();
-    let to_compare_slice = unsafe {
-        assert!(!to_compare.is_null());
-        std::slice::from_raw_parts(to_compare, to_compare_length)
-    }
-    .to_vec();
-    let result: bool =
-        <CASBlake2 as CASHasher>::verify_512_threadpool(data_slice, to_compare_slice);
-    result
-}
-
-#[no_mangle]
 pub extern "C" fn blake2_256_bytes(
     data_to_hash: *const c_uchar,
     data_to_hash_length: usize,
@@ -119,27 +76,6 @@ pub extern "C" fn blake2_256_bytes(
     };
     std::mem::forget(result);
     return return_result;
-}
-
-#[no_mangle]
-pub extern "C" fn blake2_256_bytes_threadpool(
-    data_to_hash: *const c_uchar,
-    data_to_hash_length: usize,
-) -> Blake2HashByteResult {
-    let data_to_hash_slice = unsafe {
-        assert!(!data_to_hash.is_null());
-        std::slice::from_raw_parts(data_to_hash, data_to_hash_length)
-    }
-    .to_vec();
-    let mut result = <CASBlake2 as CASHasher>::hash_256_threadpool(data_to_hash_slice);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
-    let return_result = Blake2HashByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
-        length: result.len(),
-    };
-    std::mem::forget(result);
-    return_result
 }
 
 #[test]
@@ -174,26 +110,6 @@ pub extern "C" fn blake2_256_bytes_verify(
     result
 }
 
-#[no_mangle]
-pub extern "C" fn blake2_256_bytes_verify_threadpool(
-    hashed_data: *const c_uchar,
-    hashed_data_length: usize,
-    to_compare: *const c_uchar,
-    to_compare_length: usize,
-) -> bool {
-    let data_slice = unsafe {
-        assert!(!hashed_data.is_null());
-        std::slice::from_raw_parts(hashed_data, hashed_data_length)
-    }
-    .to_vec();
-    let to_compare_slice = unsafe {
-        assert!(!to_compare.is_null());
-        std::slice::from_raw_parts(to_compare, to_compare_length)
-    }
-    .to_vec();
-    let result = <CASBlake2 as CASHasher>::verify_256_threadpool(data_slice, to_compare_slice);
-    result
-}
 
 #[test]
 fn blake2_256_bytes_verify_test() {

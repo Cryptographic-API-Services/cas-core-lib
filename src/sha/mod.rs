@@ -22,24 +22,6 @@ pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) ->
 }
 
 #[no_mangle]
-pub extern "C" fn sha512_bytes_threadpool(
-    data_to_hash: *const c_uchar,
-    data_len: usize,
-) -> SHAHashByteResult {
-    assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
-    let mut result = <CASSHA as CASHasher>::hash_512_threadpool(data_to_hash_slice);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
-    let return_result = SHAHashByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
-        length: result.len(),
-    };
-    std::mem::forget(result);
-    return_result
-}
-
-#[no_mangle]
 pub extern "C" fn sha512_bytes_verify(
     data_to_hash: *const c_uchar,
     data_len: usize,
@@ -52,23 +34,6 @@ pub extern "C" fn sha512_bytes_verify(
     let data_to_verify_slice =
         unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
     let result = <CASSHA as CASHasher>::verify_512(data_to_verify_slice, data_to_hash_slice);
-    result
-}
-
-#[no_mangle]
-pub extern "C" fn sha512_bytes_verify_threadpool(
-    data_to_hash: *const c_uchar,
-    data_len: usize,
-    data_to_verify: *const c_uchar,
-    data_to_verify_len: usize,
-) -> bool {
-    assert!(!data_to_hash.is_null());
-    assert!(!data_to_verify.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
-    let data_to_verify_slice =
-        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
-    let result =
-        <CASSHA as CASHasher>::verify_512_threadpool(data_to_verify_slice, data_to_hash_slice);
     result
 }
 
@@ -99,24 +64,6 @@ pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) ->
 }
 
 #[no_mangle]
-pub extern "C" fn sha256_bytes_threadpool(
-    data_to_hash: *const c_uchar,
-    data_len: usize,
-) -> SHAHashByteResult {
-    assert!(!data_to_hash.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
-    let mut result = <CASSHA as CASHasher>::hash_256_threadpool(data_to_hash_slice);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
-    let return_result = SHAHashByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
-        length: result.len(),
-    };
-    std::mem::forget(result);
-    return_result
-}
-
-#[no_mangle]
 pub extern "C" fn sha256_bytes_verify(
     data_to_hash: *const c_uchar,
     data_len: usize,
@@ -129,22 +76,6 @@ pub extern "C" fn sha256_bytes_verify(
     let data_to_verify_slice =
         unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
     let result = <CASSHA as CASHasher>::verify_256(data_to_verify_slice, data_to_hash_slice);
-    result
-}
-
-#[no_mangle]
-pub extern "C" fn sha256_bytes_verify_threadpool(
-    data_to_hash: *const c_uchar,
-    data_len: usize,
-    data_to_verify: *const c_uchar,
-    data_to_verify_len: usize,
-) -> bool {
-    assert!(!data_to_hash.is_null());
-    assert!(!data_to_verify.is_null());
-    let data_to_hash_slice = unsafe { std::slice::from_raw_parts(data_to_hash, data_len) }.to_vec();
-    let data_to_verify_slice =
-        unsafe { std::slice::from_raw_parts(data_to_verify, data_to_verify_len) }.to_vec();
-    let result = <CASSHA as CASHasher>::verify_256_threadpool(data_to_verify_slice, data_to_hash_slice);
     result
 }
 
