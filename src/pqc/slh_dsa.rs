@@ -17,14 +17,14 @@ pub extern "C" fn slh_dsa_generate_signing_and_verification_key() -> SlhDsaKeyPa
 
 #[no_mangle]
 pub extern "C" fn slh_dsa_sign_message(
-    key_pair: *const u8,
-    key_pair_length: usize,
+    signing_key: *const u8,
+    signing_key_length: usize,
     message: *const u8,
     message_length: usize,
 ) -> SlhDsaSignature {
-    let key_pair_slice = unsafe {
-        assert!(!key_pair.is_null());
-        std::slice::from_raw_parts(key_pair, key_pair_length)
+    let signing_key_slice = unsafe {
+        assert!(!signing_key.is_null());
+        std::slice::from_raw_parts(signing_key, signing_key_length)
     }
     .to_vec();
     let message_slice = unsafe {
@@ -32,7 +32,7 @@ pub extern "C" fn slh_dsa_sign_message(
         std::slice::from_raw_parts(message, message_length)
     }
     .to_vec();
-    let signature: Vec<u8> = sign_message(key_pair_slice, message_slice);
+    let signature: Vec<u8> = sign_message(message_slice, signing_key_slice);
     let result = SlhDsaSignature {
         signature_ptr: signature.as_ptr(),
         signature_length: signature.len(),
@@ -43,16 +43,16 @@ pub extern "C" fn slh_dsa_sign_message(
 
 #[no_mangle]
 pub extern "C" fn slh_dsa_verify_signature(
-    public_key: *const u8,
-    public_key_length: usize,
+    verification_key: *const u8,
+    verification_key_length: usize,
     signature: *const u8,
     signature_length: usize,
     message: *const u8,
     message_length: usize,
 ) -> bool {
-    let public_key_slice = unsafe {
-        assert!(!public_key.is_null());
-        std::slice::from_raw_parts(public_key, public_key_length)
+    let verification_key_slice = unsafe {
+        assert!(!verification_key.is_null());
+        std::slice::from_raw_parts(verification_key, verification_key_length)
     }
     .to_vec();
     let signature_slice = unsafe {
@@ -65,5 +65,5 @@ pub extern "C" fn slh_dsa_verify_signature(
         std::slice::from_raw_parts(message, message_length)
     }
     .to_vec();
-    verify_signature(public_key_slice, signature_slice, message_slice)
+    verify_signature(message_slice, signature_slice, verification_key_slice)
 }
