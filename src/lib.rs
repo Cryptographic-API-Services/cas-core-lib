@@ -2,18 +2,21 @@ use zeroizing_alloc::ZeroAlloc;
 
 #[global_allocator]
 static ALLOC: ZeroAlloc<std::alloc::System> = ZeroAlloc(std::alloc::System);
-mod aes;
-mod blake2;
-mod digital_signature;
-mod ed25519;
-mod helpers;
-mod hmac;
-mod rsa;
-mod sha;
-mod x25519;
-mod ascon_aead;
-mod zstd;
-mod hpke;
+pub mod aes;
+pub mod blake2;
+pub mod digital_signature;
+pub mod ed25519;
+pub mod helpers;
+pub mod hmac;
+pub mod rsa;
+pub mod sha;
+pub mod x25519;
+pub mod ascon_aead;
+pub mod zstd;
+pub mod hpke;
+pub mod pqc {
+    pub mod slh_dsa;
+}
 
 pub mod password_hashers {
     pub mod types;
