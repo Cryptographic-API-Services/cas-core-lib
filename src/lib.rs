@@ -16,6 +16,7 @@ pub mod zstd;
 pub mod hpke;
 pub mod pqc {
     pub mod slh_dsa;
+    pub mod types;
 }
 
 pub mod password_hashers {
