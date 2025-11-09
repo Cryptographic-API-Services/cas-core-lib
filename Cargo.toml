@@ -1,6 +1,6 @@
 [package]
 name = "cas_core_lib"
-version = "0.2.4"
+version = "0.2.6"
 edition = "2021"
 description = "This is a Rust library providing external facing functions to performant and trusted encryption in Rust"
 license = "Apache-2.0"
@@ -14,5 +14,5 @@ crate-type = ["dylib"]
 
 [dependencies]
 libc = "0.2.146"
-cas-lib = "0.2.64"
+cas-lib = "0.2.65"
 zeroizing-alloc = "0.1.0"
