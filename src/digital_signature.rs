@@ -1,10 +1,8 @@
 use std::ffi::{c_char, c_uchar, CStr, CString};
 
 use cas_lib::digital_signature::{
-    cas_digital_signature_rsa::{ED25519DigitalSignature, RSADigitalSignature},
-    sha_256_ed25519::SHA256ED25519DigitalSignature,
+    cas_digital_signature_rsa::{RSADigitalSignature},
     sha_256_rsa::SHA256RSADigitalSignature,
-    sha_512_ed25519::SHA512ED25519DigitalSignature,
     sha_512_rsa::SHA512RSADigitalSignature,
 };
 
@@ -147,124 +145,5 @@ pub extern "C" fn sha_256_rsa_digital_signature_verify(
         data_to_verify_slice,
         signature_slice,
     );
-    result
-}
-
-
-#[no_mangle]
-pub extern "C" fn sha512_ed25519_digital_signature(
-    data_to_sign: *const c_uchar,
-    data_length: usize,
-) -> SHAED25519DalekDigitalSignatureResult {
-    let data_to_sign_slice = unsafe {
-        assert!(!data_to_sign.is_null());
-        std::slice::from_raw_parts(data_to_sign, data_length)
-    }
-    .to_vec();
-    let result =
-        <SHA512ED25519DigitalSignature as ED25519DigitalSignature>::digital_signature_ed25519(
-            data_to_sign_slice,
-        );
-    let mut public_key = result.public_key;
-    let public_key_capacity = public_key.capacity();
-    public_key.reserve_exact(public_key_capacity);
-    let mut signature = result.signature;
-    let signature_capacity = signature.capacity();
-    signature.reserve_exact(signature_capacity);
-    let result = SHAED25519DalekDigitalSignatureResult {
-        public_key: public_key.as_mut_ptr(),
-        public_key_length: public_key.len(),
-        signature_raw_ptr: signature.as_mut_ptr(),
-        signature_length: signature.len(),
-    };
-    std::mem::forget(public_key);
-    std::mem::forget(signature);
-    result
-}
-
-#[no_mangle]
-pub extern "C" fn sha256_ed25519_digital_signature(
-    data_to_sign: *const c_uchar,
-    data_length: usize,
-) -> SHAED25519DalekDigitalSignatureResult {
-    let data_to_sign_slice = unsafe {
-        assert!(!data_to_sign.is_null());
-        std::slice::from_raw_parts(data_to_sign, data_length)
-    }
-    .to_vec();
-    let result =
-        <SHA256ED25519DigitalSignature as ED25519DigitalSignature>::digital_signature_ed25519(
-            data_to_sign_slice,
-        );
-    let mut public_key = result.public_key;
-    let public_key_capacity = public_key.capacity();
-    public_key.reserve_exact(public_key_capacity);
-    let mut signature = result.signature;
-    let signature_capacity = signature.capacity();
-    signature.reserve_exact(signature_capacity);
-    let result = SHAED25519DalekDigitalSignatureResult {
-        public_key: public_key.as_mut_ptr(),
-        public_key_length: public_key.len(),
-        signature_raw_ptr: signature.as_mut_ptr(),
-        signature_length: signature.len(),
-    };
-    std::mem::forget(public_key);
-    std::mem::forget(signature);
-    result
-}
-
-#[no_mangle]
-pub extern "C" fn sha512_ed25519_digital_signature_verify(
-    public_key: *const c_uchar,
-    public_key_length: usize,
-    data_to_verify: *const c_uchar,
-    data_to_verify_length: usize,
-    signature: *const c_uchar,
-    signature_length: usize,
-) -> bool {
-    let public_key_slice = unsafe {
-        assert!(!public_key.is_null());
-        std::slice::from_raw_parts(public_key, public_key_length)
-    }
-    .to_vec();
-    let data_to_verify_slice = unsafe {
-        assert!(!data_to_verify.is_null());
-        std::slice::from_raw_parts(data_to_verify, data_to_verify_length)
-    }
-    .to_vec();
-    let signature_slice = unsafe {
-        assert!(!signature.is_null());
-        std::slice::from_raw_parts(signature, signature_length)
-    }
-    .to_vec();
-    let result = <SHA512ED25519DigitalSignature as ED25519DigitalSignature>::digital_signature_ed25519_verify(public_key_slice, data_to_verify_slice,  signature_slice);
-    result
-}
-
-#[no_mangle]
-pub extern "C" fn sha256_ed25519_digital_signature_verify(
-    public_key: *const c_uchar,
-    public_key_length: usize,
-    data_to_verify: *const c_uchar,
-    data_to_verify_length: usize,
-    signature: *const c_uchar,
-    signature_length: usize,
-) -> bool {
-    let public_key_slice = unsafe {
-        assert!(!public_key.is_null());
-        std::slice::from_raw_parts(public_key, public_key_length)
-    }
-    .to_vec();
-    let data_to_verify_slice = unsafe {
-        assert!(!data_to_verify.is_null());
-        std::slice::from_raw_parts(data_to_verify, data_to_verify_length)
-    }
-    .to_vec();
-    let signature_slice = unsafe {
-        assert!(!signature.is_null());
-        std::slice::from_raw_parts(signature, signature_length)
-    }
-    .to_vec();
-    let result = <SHA256ED25519DigitalSignature as ED25519DigitalSignature>::digital_signature_ed25519_verify(public_key_slice, data_to_verify_slice,  signature_slice);
     result
 }

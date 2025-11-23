@@ -3,8 +3,10 @@ use libc::c_uchar;
 
 #[repr(C)]
 pub struct Ed25519KeyPairBytesResult {
-    key_pair: *mut c_uchar,
-    length: usize,
+    signing_key: *mut c_uchar,
+    signing_key_length: usize,
+    verifying_key: *mut c_uchar,
+    verifying_key_length: usize,
 }
 
 #[repr(C)]
@@ -18,13 +20,18 @@ pub struct Ed25519ByteSignatureResult {
 #[no_mangle]
 pub extern "C" fn get_ed25519_key_pair_bytes() -> Ed25519KeyPairBytesResult {
     let mut keypair = get_ed25519_key_pair();
-    let capacity = keypair.capacity();
-    keypair.reserve_exact(capacity);
+    let signing_key_capacity = keypair.key_pair.capacity();
+    keypair.key_pair.reserve_exact(signing_key_capacity);
+    let verifying_key_capacity = keypair.public_key.capacity();
+    keypair.public_key.reserve_exact(verifying_key_capacity);
     let result = Ed25519KeyPairBytesResult {
-        length: keypair.len(),
-        key_pair: keypair.as_mut_ptr(),
+        signing_key_length: keypair.key_pair.len(),
+        signing_key: keypair.key_pair.as_mut_ptr(),
+        verifying_key_length: keypair.public_key.len(),
+        verifying_key: keypair.public_key.as_mut_ptr(),
     };
-    std::mem::forget(keypair);
+    std::mem::forget(keypair.key_pair);
+    std::mem::forget(keypair.public_key);
     result
 }
 
@@ -32,8 +39,10 @@ pub extern "C" fn get_ed25519_key_pair_bytes() -> Ed25519KeyPairBytesResult {
 #[test]
 fn get_ed25519_key_pair_bytes_test() {
     let key_pair_result = get_ed25519_key_pair_bytes();
-    assert_eq!(false, key_pair_result.key_pair.is_null());
-    assert_eq!(true, key_pair_result.length > 0);
+    assert_eq!(false, key_pair_result.signing_key.is_null());
+    assert_eq!(true, key_pair_result.signing_key_length > 0);
+    assert_eq!(false, key_pair_result.verifying_key.is_null());
+    assert_eq!(true, key_pair_result.verifying_key_length > 0);
 }
 
 #[no_mangle]
@@ -78,8 +87,8 @@ fn sign_with_key_pair_bytes_test() {
     let message: &str = "ThisIsAMessageToSignWithED25519Dalek";
     let message_byte: &[u8] = message.as_bytes();
     let signature_result: Ed25519ByteSignatureResult = sign_with_key_pair_bytes(
-        key_pair_result.key_pair,
-        key_pair_result.length,
+        key_pair_result.signing_key,
+        key_pair_result.signing_key_length,
         message_byte.as_ptr(),
         message_byte.len(),
     );
@@ -119,14 +128,14 @@ fn verify_with_key_pair_bytes_test() {
     let key_pair = get_ed25519_key_pair_bytes();
     let message = "SignThisMessageWithED25519Dalek".as_bytes();
     let sign_result: Ed25519ByteSignatureResult = sign_with_key_pair_bytes(
-        key_pair.key_pair,
-        key_pair.length,
+        key_pair.signing_key,
+        key_pair.signing_key_length,
         message.as_ptr(),
         message.len(),
     );
     let is_valid = verify_with_key_pair_bytes(
-        key_pair.key_pair,
-        key_pair.length,
+        key_pair.signing_key,
+        key_pair.signing_key_length,
         sign_result.signature_byte_ptr,
         sign_result.signature_length,
         message.as_ptr(),
@@ -164,8 +173,8 @@ fn verify_with_public_key_bytes_test() {
     let key_pair = get_ed25519_key_pair_bytes();
     let message = "SignThisMessageWithED25519Dalek".as_bytes();
     let signature_result: Ed25519ByteSignatureResult = sign_with_key_pair_bytes(
-        key_pair.key_pair,
-        key_pair.length,
+        key_pair.signing_key,
+        key_pair.signing_key_length,
         message.as_ptr(),
         message.len(),
     );
