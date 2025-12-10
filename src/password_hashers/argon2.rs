@@ -3,6 +3,23 @@ use cas_lib::password_hashers::argon2::CASArgon;
 
 use super::types::Argon2KDFAes128;
 
+
+#[no_mangle]
+pub extern "C" fn argon2_hash_password_parameters(memory_cost: u32, iterations: u32, parallelism: u32, password_to_hash: *const c_char) -> *mut c_char {
+    let password = unsafe {
+        assert!(!password_to_hash.is_null());
+        CStr::from_ptr(password_to_hash)
+    }
+    .to_str()
+    .unwrap()
+    .to_string();
+
+    let hash = CASArgon::hash_password_parameters(memory_cost, iterations, parallelism, password);
+    let hash_cstr = CString::new(hash).unwrap().into_raw();
+    return hash_cstr;
+}
+
+
 #[no_mangle]
 pub extern "C" fn argon2_derive_aes_128_key(hashed_password: *const c_char) -> Argon2KDFAes128 {
     let hashed_password_bytes = unsafe {
