@@ -1,6 +1,26 @@
 use std::ffi::{c_char, CStr, CString};
 use cas_lib::password_hashers::{scrypt::CASScrypt};
 
+
+#[no_mangle]
+pub extern "C" fn scrypt_hash_with_parameters(
+    pass_to_hash: *const c_char,
+    cpu_memory_cost: u8,
+    block_size: u32,
+    parallelism: u32,
+) -> *mut c_char {
+    let string_pass = unsafe {
+        assert!(!pass_to_hash.is_null());
+
+        CStr::from_ptr(pass_to_hash)
+    }
+    .to_str()
+    .unwrap()
+    .to_string();
+    let new_hash = CASScrypt::hash_password_customized(string_pass, cpu_memory_cost, block_size, parallelism);
+    return CString::new(new_hash).unwrap().into_raw();
+}
+
 #[no_mangle]
 pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
     let string_pass = unsafe {
