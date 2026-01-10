@@ -1,5 +1,5 @@
 use std::ffi::{c_char, CStr, CString};
-use cas_lib::password_hashers::{cas_password_hasher::CASPasswordHasher, scrypt::CASScrypt};
+use cas_lib::password_hashers::{scrypt::CASScrypt};
 
 #[no_mangle]
 pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
@@ -11,7 +11,7 @@ pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = <CASScrypt as CASPasswordHasher>::hash_password(string_pass);
+    let new_hash = CASScrypt::hash_password(string_pass);
     return CString::new(new_hash).unwrap().into_raw();
 }
 
@@ -50,7 +50,7 @@ pub extern "C" fn scrypt_verify(
     .unwrap()
     .to_string();
 
-    return <CASScrypt as CASPasswordHasher>::verify_password(string_hash, string_pass);
+    return CASScrypt::verify_password(string_hash, string_pass);
 }
 
 #[test]
