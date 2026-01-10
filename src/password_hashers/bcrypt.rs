@@ -1,7 +1,22 @@
 use std::{
-    ffi::{c_char, CStr, CString}, sync::mpsc, thread
+    ffi::{c_char, CStr, CString}
 };
-use cas_lib::password_hashers::{bcrypt::CASBCrypt, cas_password_hasher::CASPasswordHasher};
+use cas_lib::password_hashers::{bcrypt::CASBCrypt};
+
+#[no_mangle]
+pub extern "C" fn bcrypt_hash_with_parameters(pass_to_hash: *const c_char, cost: u32) -> *mut c_char {
+    let string_pass = unsafe {
+        assert!(!pass_to_hash.is_null());
+
+        CStr::from_ptr(pass_to_hash)
+    }
+    .to_str()
+    .unwrap()
+    .to_string();
+    let new_hashed = CASBCrypt::hash_password_customized(string_pass, cost);
+    return CString::new(new_hashed).unwrap().into_raw();
+}
+
 
 #[no_mangle]
 pub extern "C" fn bcrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
@@ -13,7 +28,7 @@ pub extern "C" fn bcrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
     .to_str()
     .unwrap()
     .to_string();
-    let new_hashed = <CASBCrypt as CASPasswordHasher>::hash_password(string_pass);
+    let new_hashed = CASBCrypt::hash_password(string_pass);
     return CString::new(new_hashed).unwrap().into_raw();
 }
 
@@ -48,7 +63,7 @@ pub extern "C" fn bcrypt_verify(pass: *const c_char, hash: *const c_char) -> boo
     .to_str()
     .unwrap()
     .to_string();
-    return <CASBCrypt as CASPasswordHasher>::verify_password(string_hash, string_pass);
+    return CASBCrypt::verify_password(string_hash, string_pass);
 }
 
 #[test]
