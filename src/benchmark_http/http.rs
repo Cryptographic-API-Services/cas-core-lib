@@ -25,7 +25,9 @@ pub extern "C" fn set_api_key(api_key: *const c_char) {
     .to_str()
     .unwrap()
     .to_string();
-    RUNTIME.block_on(set_api_key_in_cache(api_key_string));
+    RUNTIME.block_on(async {
+        set_api_key_in_cache(api_key_string).await;
+    });
 }
 
 #[no_mangle]
