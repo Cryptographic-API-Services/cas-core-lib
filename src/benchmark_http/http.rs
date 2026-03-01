@@ -17,7 +17,7 @@ pub extern "C" fn set_base_url(base_url: *const c_char) {
 }
 
 #[no_mangle]
-pub extern "C" fn set_api_key(api_key: *const c_char) {
+pub extern "C" fn set_api_key(api_key: *const c_char) -> bool {
     let api_key_string = unsafe {
         assert!(!api_key.is_null());
         CStr::from_ptr(api_key)
@@ -28,6 +28,7 @@ pub extern "C" fn set_api_key(api_key: *const c_char) {
     RUNTIME.block_on(async {
         set_api_key_in_cache(api_key_string).await;
     });
+    true
 }
 
 #[no_mangle]
