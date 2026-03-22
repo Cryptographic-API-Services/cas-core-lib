@@ -25,7 +25,3 @@ pub mod password_hashers {
     pub mod scrypt;
     pub mod bcrypt;
 }
-
-pub mod benchmark_http {
-    pub mod http;
-}
