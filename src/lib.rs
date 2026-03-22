@@ -4,7 +4,6 @@ use zeroizing_alloc::ZeroAlloc;
 static ALLOC: ZeroAlloc<std::alloc::System> = ZeroAlloc(std::alloc::System);
 pub mod aes;
 pub mod blake2;
-pub mod digital_signature;
 pub mod ed25519;
 pub mod helpers;
 pub mod hmac;
