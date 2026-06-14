@@ -1,6 +1,8 @@
 use cas_lib::key_exchange::{cas_key_exchange::CASKeyExchange, x25519::X25519};
 use std::ffi::c_uchar;
 
+use crate::helpers::cas_error_code;
+
 #[repr(C)]
 pub struct x25519SecretPublicKeyResult {
     pub secret_key: *mut c_uchar,
@@ -13,6 +15,7 @@ pub struct x25519SecretPublicKeyResult {
 pub struct x25519SharedSecretResult {
     pub shared_secret: *mut c_uchar,
     pub shared_secret_length: usize,
+    pub error_code: i32,
 }
 
 #[no_mangle]
@@ -84,14 +87,22 @@ pub extern "C" fn diffie_hellman(
     let other_user_public_key =
         unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) }
             .to_vec();
-    let mut result =
-        <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
-    let return_result = x25519SharedSecretResult {
-        shared_secret: result.as_mut_ptr(),
-        shared_secret_length: result.len(),
-    };
-    std::mem::forget(result);
-    return_result
+    match <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key) {
+        Ok(mut result) => {
+            let capacity = result.capacity();
+            result.reserve_exact(capacity);
+            let return_result = x25519SharedSecretResult {
+                shared_secret: result.as_mut_ptr(),
+                shared_secret_length: result.len(),
+                error_code: 0,
+            };
+            std::mem::forget(result);
+            return_result
+        }
+        Err(e) => x25519SharedSecretResult {
+            shared_secret: std::ptr::null_mut(),
+            shared_secret_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }

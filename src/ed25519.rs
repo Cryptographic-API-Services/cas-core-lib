@@ -1,6 +1,8 @@
 use cas_lib::signatures::ed25519::{ed25519_sign_with_key_pair,  ed25519_verify_with_key_pair,  ed25519_verify_with_public_key,  get_ed25519_key_pair};
 use libc::c_uchar;
 
+use crate::helpers::{cas_error_code, CasVerifyResult};
+
 #[repr(C)]
 pub struct Ed25519KeyPairBytesResult {
     signing_key: *mut c_uchar,
@@ -15,6 +17,7 @@ pub struct Ed25519ByteSignatureResult {
     pub signature_length: usize,
     pub public_key: *mut c_uchar,
     pub public_key_length: usize,
+    pub error_code: i32,
 }
 
 #[no_mangle]
@@ -62,22 +65,33 @@ pub extern "C" fn sign_with_key_pair_bytes(
         std::slice::from_raw_parts(message_to_sign, message_to_sign_length)
     }
     .to_vec();
-    let result = ed25519_sign_with_key_pair(key_pair_slice, message_to_sign_slice);
-    let mut public_key = result.public_key;
-    let public_key_capacity = public_key.capacity();
-    public_key.reserve_exact(public_key_capacity);
-    let mut signature = result.signature;
-    let siganture_capacity = signature.capacity();
-    signature.reserve_exact(siganture_capacity);
-    let result = Ed25519ByteSignatureResult {
-        signature_byte_ptr: signature.as_mut_ptr(),
-        signature_length: signature.len(),
-        public_key: public_key.as_mut_ptr(),
-        public_key_length: public_key.len(),
-    };
-    std::mem::forget(public_key);
-    std::mem::forget(signature);
-    result
+    match ed25519_sign_with_key_pair(key_pair_slice, message_to_sign_slice) {
+        Ok(result) => {
+            let mut public_key = result.public_key;
+            let public_key_capacity = public_key.capacity();
+            public_key.reserve_exact(public_key_capacity);
+            let mut signature = result.signature;
+            let siganture_capacity = signature.capacity();
+            signature.reserve_exact(siganture_capacity);
+            let result = Ed25519ByteSignatureResult {
+                signature_byte_ptr: signature.as_mut_ptr(),
+                signature_length: signature.len(),
+                public_key: public_key.as_mut_ptr(),
+                public_key_length: public_key.len(),
+                error_code: 0,
+            };
+            std::mem::forget(public_key);
+            std::mem::forget(signature);
+            result
+        }
+        Err(e) => Ed25519ByteSignatureResult {
+            signature_byte_ptr: std::ptr::null_mut(),
+            signature_length: 0,
+            public_key: std::ptr::null_mut(),
+            public_key_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 
@@ -106,7 +120,7 @@ pub extern "C" fn verify_with_key_pair_bytes(
     signature_length: usize,
     message: *const c_uchar,
     message_length: usize,
-) -> bool {
+) -> CasVerifyResult {
     let key_pair_slice = unsafe {
         assert!(!key_pair.is_null());
         std::slice::from_raw_parts(key_pair, key_pair_length)
@@ -119,7 +133,10 @@ pub extern "C" fn verify_with_key_pair_bytes(
         assert!(!message.is_null());
         std::slice::from_raw_parts(message, message_length)
     }.to_vec();
-    return ed25519_verify_with_key_pair(key_pair_slice, signature_slice, message_slice);
+    match ed25519_verify_with_key_pair(key_pair_slice, signature_slice, message_slice) {
+        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
+        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
+    }
 }
 
 
@@ -141,7 +158,7 @@ fn verify_with_key_pair_bytes_test() {
         message.as_ptr(),
         message.len(),
     );
-    assert_eq!(true, is_valid);
+    assert_eq!(true, is_valid.is_valid);
 }
 
 #[no_mangle]
@@ -152,7 +169,7 @@ pub extern "C" fn verify_with_public_key_bytes(
     signature_length: usize,
     message: *const c_uchar,
     message_length: usize,
-) -> bool {
+) -> CasVerifyResult {
     let public_key_slice = unsafe {
         assert!(!public_key.is_null());
         std::slice::from_raw_parts(public_key, public_key_length)
@@ -165,7 +182,10 @@ pub extern "C" fn verify_with_public_key_bytes(
         assert!(!message.is_null());
         std::slice::from_raw_parts(message, message_length)
     }.to_vec();
-    return ed25519_verify_with_public_key(public_key_slice, signature_slice, message_slice);
+    match ed25519_verify_with_public_key(public_key_slice, signature_slice, message_slice) {
+        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
+        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
+    }
 }
 
 #[test]
@@ -178,7 +198,7 @@ fn verify_with_public_key_bytes_test() {
         message.as_ptr(),
         message.len(),
     );
-    let is_valid: bool = verify_with_public_key_bytes(
+    let is_valid = verify_with_public_key_bytes(
         signature_result.public_key,
         signature_result.public_key_length,
         signature_result.signature_byte_ptr,
@@ -186,5 +206,5 @@ fn verify_with_public_key_bytes_test() {
         message.as_ptr(),
         message.len(),
     );
-    assert_eq!(true, is_valid);
+    assert_eq!(true, is_valid.is_valid);
 }

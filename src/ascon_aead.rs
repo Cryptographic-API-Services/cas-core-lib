@@ -1,17 +1,21 @@
-use std::ffi::{c_char, c_uchar, CStr, CString};
+use std::ffi::c_uchar;
 use cas_lib::sponges::ascon_aead::AsconAead;
 use cas_lib::sponges::cas_ascon_aead::{CASAsconAead};
+
+use crate::helpers::cas_error_code;
 
 #[repr(C)]
 pub struct Ascon128EncryptResult {
     ciphertext: *mut c_uchar,
     length: usize,
+    error_code: i32,
 }
 
 #[repr(C)]
 pub struct Ascon128DecryptResult {
     plaintext: *mut c_uchar,
     length: usize,
+    error_code: i32,
 }
 
 #[repr(C)]
@@ -67,15 +71,24 @@ pub extern "C" fn ascon_128_encrypt(
     let nonce_key = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) }.to_vec();
     let key = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
     let to_encrypt = unsafe { std::slice::from_raw_parts(to_encrypt, to_encrypt_length) }.to_vec();
-    let mut ciphertext = <AsconAead as CASAsconAead>::encrypt(key, nonce_key, to_encrypt);
-    let capacity = ciphertext.capacity();
-    ciphertext.reserve_exact(capacity);
-    let result = Ascon128EncryptResult {
-        ciphertext: ciphertext.as_mut_ptr(),
-        length: ciphertext.len(),
-    };
-    std::mem::forget(ciphertext);
-    result
+    match <AsconAead as CASAsconAead>::encrypt(key, nonce_key, to_encrypt) {
+        Ok(mut ciphertext) => {
+            let capacity = ciphertext.capacity();
+            ciphertext.reserve_exact(capacity);
+            let result = Ascon128EncryptResult {
+                ciphertext: ciphertext.as_mut_ptr(),
+                length: ciphertext.len(),
+                error_code: 0,
+            };
+            std::mem::forget(ciphertext);
+            result
+        }
+        Err(e) => Ascon128EncryptResult {
+            ciphertext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 
@@ -93,13 +106,22 @@ pub extern "C" fn ascon_128_decrypt(
     let nonce_key = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) }.to_vec();
     let key = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
     let to_decrypt = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) }.to_vec();
-    let mut plaintext = <AsconAead as CASAsconAead>::decrypt(key, nonce_key, to_decrypt);
-    let capacity = plaintext.capacity();
-    plaintext.reserve_exact(capacity);
-    let result = Ascon128DecryptResult {
-        plaintext: plaintext.as_mut_ptr(),
-        length: plaintext.len(),
-    };
-    std::mem::forget(plaintext);
-    result
+    match <AsconAead as CASAsconAead>::decrypt(key, nonce_key, to_decrypt) {
+        Ok(mut plaintext) => {
+            let capacity = plaintext.capacity();
+            plaintext.reserve_exact(capacity);
+            let result = Ascon128DecryptResult {
+                plaintext: plaintext.as_mut_ptr(),
+                length: plaintext.len(),
+                error_code: 0,
+            };
+            std::mem::forget(plaintext);
+            result
+        }
+        Err(e) => Ascon128DecryptResult {
+            plaintext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }

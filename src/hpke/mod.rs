@@ -3,6 +3,8 @@ use std::ffi::c_uchar;
 use cas_lib::hybrid::{cas_hybrid::CASHybrid, hpke::CASHPKE};
 use types::{HpkeDecrypt, HpkeEncrypt, HpkeKeyPair};
 
+use crate::helpers::cas_error_code;
+
 mod types;
 
 #[no_mangle]
@@ -40,25 +42,38 @@ pub extern "C" fn hpke_encrypt(
     let plaintext = unsafe { std::slice::from_raw_parts(plaintext, plaintext_length) }.to_vec();
     let public_key = unsafe { std::slice::from_raw_parts(public_key, public_keylength) }.to_vec();
     let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
-    let (mut encapped_key, mut ciphertext, mut tag) = <CASHPKE as CASHybrid>::encrypt(plaintext, public_key, info_str);
-    let encapped_key_capacity = encapped_key.capacity();
-    encapped_key.reserve_exact(encapped_key_capacity);
-    let ciphertext_capacity = ciphertext.capacity();
-    ciphertext.reserve_exact(ciphertext_capacity);
-    let tag_capacity = tag.capacity();
-    tag.reserve_exact(tag_capacity);
-    let return_result = HpkeEncrypt {
-        encapped_key_ptr: encapped_key.as_mut_ptr(),
-        encapped_key_ptr_length: encapped_key.len(),
-        ciphertext_ptr: ciphertext.as_mut_ptr(),
-        ciphertext_ptr_length: ciphertext.len(),
-        tag_ptr: tag.as_mut_ptr(),
-        tag_ptr_length: tag.len()
-    };
-    std::mem::forget(encapped_key);
-    std::mem::forget(ciphertext);
-    std::mem::forget(tag);
-    return_result
+    match <CASHPKE as CASHybrid>::encrypt(plaintext, public_key, info_str) {
+        Ok((mut encapped_key, mut ciphertext, mut tag)) => {
+            let encapped_key_capacity = encapped_key.capacity();
+            encapped_key.reserve_exact(encapped_key_capacity);
+            let ciphertext_capacity = ciphertext.capacity();
+            ciphertext.reserve_exact(ciphertext_capacity);
+            let tag_capacity = tag.capacity();
+            tag.reserve_exact(tag_capacity);
+            let return_result = HpkeEncrypt {
+                encapped_key_ptr: encapped_key.as_mut_ptr(),
+                encapped_key_ptr_length: encapped_key.len(),
+                ciphertext_ptr: ciphertext.as_mut_ptr(),
+                ciphertext_ptr_length: ciphertext.len(),
+                tag_ptr: tag.as_mut_ptr(),
+                tag_ptr_length: tag.len(),
+                error_code: 0,
+            };
+            std::mem::forget(encapped_key);
+            std::mem::forget(ciphertext);
+            std::mem::forget(tag);
+            return_result
+        }
+        Err(e) => HpkeEncrypt {
+            encapped_key_ptr: std::ptr::null_mut(),
+            encapped_key_ptr_length: 0,
+            ciphertext_ptr: std::ptr::null_mut(),
+            ciphertext_ptr_length: 0,
+            tag_ptr: std::ptr::null_mut(),
+            tag_ptr_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 #[no_mangle]
@@ -79,13 +94,22 @@ pub extern "C" fn hpke_decrypt(
     let encapped_key = unsafe { std::slice::from_raw_parts(encapped_key, encapped_key_length) }.to_vec();
     let tag = unsafe { std::slice::from_raw_parts(tag, tag_length)}.to_vec();
     let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
-    let mut plaintext = <CASHPKE as CASHybrid>::decrypt(ciphertext, private_key, encapped_key, tag, info_str);
-    let plaintext_capacity = plaintext.capacity();
-    plaintext.reserve_exact(plaintext_capacity);
-    let return_result = HpkeDecrypt {
-        plaintext_ptr: plaintext.as_mut_ptr(),
-        plaintext_ptr_length: plaintext.len()
-    };
-    std::mem::forget(plaintext);
-    return_result
+    match <CASHPKE as CASHybrid>::decrypt(ciphertext, private_key, encapped_key, tag, info_str) {
+        Ok(mut plaintext) => {
+            let plaintext_capacity = plaintext.capacity();
+            plaintext.reserve_exact(plaintext_capacity);
+            let return_result = HpkeDecrypt {
+                plaintext_ptr: plaintext.as_mut_ptr(),
+                plaintext_ptr_length: plaintext.len(),
+                error_code: 0,
+            };
+            std::mem::forget(plaintext);
+            return_result
+        }
+        Err(e) => HpkeDecrypt {
+            plaintext_ptr: std::ptr::null_mut(),
+            plaintext_ptr_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }

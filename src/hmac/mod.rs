@@ -2,6 +2,7 @@ use cas_lib::message::{cas_hmac::CASHMAC, hmac::HMAC};
 use libc::c_uchar;
 
 use self::types::HmacSignByteResult;
+use crate::helpers::{cas_error_code, CasVerifyResult};
 
 mod types;
 
@@ -17,15 +18,24 @@ pub extern "C" fn hmac_sign_bytes(
     let key_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
     let message_slice: Vec<u8> =
         unsafe { std::slice::from_raw_parts(message, message_length) }.to_vec();
-    let mut result = <HMAC as CASHMAC>::sign(key_slice, message_slice);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
-    let return_result = HmacSignByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
-        length: result.len(),
-    };
-    std::mem::forget(result);
-    return_result
+    match <HMAC as CASHMAC>::sign(key_slice, message_slice) {
+        Ok(mut result) => {
+            let capacity = result.capacity();
+            result.reserve_exact(capacity);
+            let return_result = HmacSignByteResult {
+                result_bytes_ptr: result.as_mut_ptr(),
+                length: result.len(),
+                error_code: 0,
+            };
+            std::mem::forget(result);
+            return_result
+        }
+        Err(e) => HmacSignByteResult {
+            result_bytes_ptr: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 #[test]
@@ -53,15 +63,17 @@ pub extern "C" fn hmac_verify_bytes(
     message_length: usize,
     signature: *const c_uchar,
     signature_length: usize,
-) -> bool {
+) -> CasVerifyResult {
     assert!(!key.is_null());
     assert!(!message.is_null());
     assert!(!signature.is_null());
     let key_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
     let message_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(message, message_length) }.to_vec();
     let signature_slice: Vec<u8> = unsafe { std::slice::from_raw_parts(signature, signature_length) }.to_vec();
-    let result = <HMAC as CASHMAC>::verify(key_slice, message_slice, signature_slice);
-    result
+    match <HMAC as CASHMAC>::verify(key_slice, message_slice, signature_slice) {
+        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
+        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
+    }
 }
 
 #[test]
@@ -86,5 +98,5 @@ fn hmac_verify_bytes_test() {
         result.result_bytes_ptr,
         result.length,
     );
-    assert_eq!(true, valid);
+    assert_eq!(true, valid.is_valid);
 }

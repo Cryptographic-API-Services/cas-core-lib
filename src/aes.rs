@@ -1,6 +1,7 @@
 use cas_lib::symmetric::{aes::{CASAES128, CASAES256}, cas_symmetric_encryption::{CASAES128Encryption, CASAES256Encryption}};
 use std::ffi::c_uchar;
 
+use crate::helpers::cas_error_code;
 use crate::x25519;
 
 #[repr(C)]
@@ -19,18 +20,21 @@ pub struct AesKeyResult {
 pub struct AesBytesEncrypt {
     pub ciphertext: *mut c_uchar,
     pub length: usize,
+    pub error_code: i32,
 }
 
 #[repr(C)]
 pub struct AesBytesDecrypt {
     pub plaintext: *mut c_uchar,
     pub length: usize,
+    pub error_code: i32,
 }
 
 #[repr(C)]
 pub struct AesNonceAndKeyFromX25519DiffieHellman {
     pub aes_key_ptr: *mut c_uchar,
-    pub aes_key_ptr_length: usize
+    pub aes_key_ptr_length: usize,
+    pub error_code: i32,
 }
 
 #[no_mangle]
@@ -40,17 +44,25 @@ pub extern "C" fn aes_256_key_from_x25519_diffie_hellman_shared_secret(
 ) -> AesNonceAndKeyFromX25519DiffieHellman {
     let shared_secret_slice: Vec<u8> =
         unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) }.to_vec();
-        
-        let mut aes_key = <CASAES256 as CASAES256Encryption>::key_from_vec(shared_secret_slice);
-        let aes_key_capacity = aes_key.capacity();
-        aes_key.reserve_exact(aes_key_capacity);
 
-    let result = AesNonceAndKeyFromX25519DiffieHellman {
-        aes_key_ptr: aes_key.as_mut_ptr(),
-        aes_key_ptr_length: aes_key.len()
-    };
-    std::mem::forget(aes_key);
-    result
+    match <CASAES256 as CASAES256Encryption>::key_from_vec(shared_secret_slice) {
+        Ok(mut aes_key) => {
+            let aes_key_capacity = aes_key.capacity();
+            aes_key.reserve_exact(aes_key_capacity);
+            let result = AesNonceAndKeyFromX25519DiffieHellman {
+                aes_key_ptr: aes_key.as_mut_ptr(),
+                aes_key_ptr_length: aes_key.len(),
+                error_code: 0,
+            };
+            std::mem::forget(aes_key);
+            result
+        }
+        Err(e) => AesNonceAndKeyFromX25519DiffieHellman {
+            aes_key_ptr: std::ptr::null_mut(),
+            aes_key_ptr_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 
@@ -120,13 +132,22 @@ pub extern "C" fn aes_128_key_from_x25519_diffie_hellman_shared_secret(
 ) -> AesNonceAndKeyFromX25519DiffieHellman {
     let shared_secret_slice: Vec<u8> =
         unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) }.to_vec();
-    let mut aes_key = <CASAES128 as CASAES128Encryption>::key_from_x25519_shared_secret(shared_secret_slice);
-    let result = AesNonceAndKeyFromX25519DiffieHellman {
-        aes_key_ptr: aes_key.as_mut_ptr(),
-        aes_key_ptr_length: aes_key.len()
-    };
-    std::mem::forget(aes_key);
-    result
+    match <CASAES128 as CASAES128Encryption>::key_from_x25519_shared_secret(shared_secret_slice) {
+        Ok(mut aes_key) => {
+            let result = AesNonceAndKeyFromX25519DiffieHellman {
+                aes_key_ptr: aes_key.as_mut_ptr(),
+                aes_key_ptr_length: aes_key.len(),
+                error_code: 0,
+            };
+            std::mem::forget(aes_key);
+            result
+        }
+        Err(e) => AesNonceAndKeyFromX25519DiffieHellman {
+            aes_key_ptr: std::ptr::null_mut(),
+            aes_key_ptr_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 
@@ -248,15 +269,24 @@ pub extern "C" fn aes_128_encrypt_bytes_with_key(
     let key_slice: Vec<u8> = unsafe {std::slice::from_raw_parts(key, key_length)}.to_vec();
     let to_encrypt_slice: Vec<u8> =
         unsafe { std::slice::from_raw_parts(to_encrypt, to_encrypt_length) }.to_vec();
-    let mut ciphertext = <CASAES128 as CASAES128Encryption>::encrypt_plaintext(key_slice, nonce_slice, to_encrypt_slice);
-    let capacity = ciphertext.capacity();
-    ciphertext.reserve_exact(capacity);
-    let result = AesBytesEncrypt {
-        ciphertext: ciphertext.as_mut_ptr(),
-        length: ciphertext.len(),
-    };
-    std::mem::forget(ciphertext);
-    return result;
+    match <CASAES128 as CASAES128Encryption>::encrypt_plaintext(key_slice, nonce_slice, to_encrypt_slice) {
+        Ok(mut ciphertext) => {
+            let capacity = ciphertext.capacity();
+            ciphertext.reserve_exact(capacity);
+            let result = AesBytesEncrypt {
+                ciphertext: ciphertext.as_mut_ptr(),
+                length: ciphertext.len(),
+                error_code: 0,
+            };
+            std::mem::forget(ciphertext);
+            result
+        }
+        Err(e) => AesBytesEncrypt {
+            ciphertext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 
@@ -273,15 +303,24 @@ pub extern "C" fn aes_256_encrypt_bytes_with_key(
     let nonce_slice = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) }.to_vec();
     let key_slice = unsafe {std::slice::from_raw_parts(key, key_length)}.to_vec();
     let to_encrypt_slice = unsafe { std::slice::from_raw_parts(to_encrypt, to_encrypt_length) }.to_vec();
-    let mut ciphertext = <CASAES256 as CASAES256Encryption>::encrypt_plaintext(key_slice, nonce_slice, to_encrypt_slice);
-    let capacity = ciphertext.capacity();
-    ciphertext.reserve_exact(capacity);
-    let result = AesBytesEncrypt {
-        ciphertext: ciphertext.as_mut_ptr(),
-        length: ciphertext.len(),
-    };
-    std::mem::forget(ciphertext);
-    return result;
+    match <CASAES256 as CASAES256Encryption>::encrypt_plaintext(key_slice, nonce_slice, to_encrypt_slice) {
+        Ok(mut ciphertext) => {
+            let capacity = ciphertext.capacity();
+            ciphertext.reserve_exact(capacity);
+            let result = AesBytesEncrypt {
+                ciphertext: ciphertext.as_mut_ptr(),
+                length: ciphertext.len(),
+                error_code: 0,
+            };
+            std::mem::forget(ciphertext);
+            result
+        }
+        Err(e) => AesBytesEncrypt {
+            ciphertext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 
@@ -298,15 +337,24 @@ pub extern "C" fn aes_128_decrypt_bytes_with_key(
     let nonce_slice = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) }.to_vec();
     let key_slice = unsafe {std::slice::from_raw_parts(key, key_length)}.to_vec();
     let to_decrypt_slice = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) }.to_vec();
-    let mut plaintext = <CASAES128 as CASAES128Encryption>::decrypt_ciphertext(key_slice, nonce_slice, to_decrypt_slice);
-    let capacity = plaintext.capacity();
-    plaintext.reserve_exact(capacity);
-    let result = AesBytesDecrypt {
-        plaintext: plaintext.as_mut_ptr(),
-        length: plaintext.len(),
-    };
-    std::mem::forget(plaintext);
-    return result;
+    match <CASAES128 as CASAES128Encryption>::decrypt_ciphertext(key_slice, nonce_slice, to_decrypt_slice) {
+        Ok(mut plaintext) => {
+            let capacity = plaintext.capacity();
+            plaintext.reserve_exact(capacity);
+            let result = AesBytesDecrypt {
+                plaintext: plaintext.as_mut_ptr(),
+                length: plaintext.len(),
+                error_code: 0,
+            };
+            std::mem::forget(plaintext);
+            result
+        }
+        Err(e) => AesBytesDecrypt {
+            plaintext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 #[no_mangle]
@@ -321,13 +369,22 @@ pub extern "C" fn aes_256_decrypt_bytes_with_key(
     let nonce_slice = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) }.to_vec();
     let key_slice = unsafe {std::slice::from_raw_parts(key, key_length)}.to_vec();
     let to_decrypt_slice = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) }.to_vec();
-    let mut plaintext = <CASAES256 as CASAES256Encryption>::decrypt_ciphertext(key_slice, nonce_slice, to_decrypt_slice);
-    let capacity = plaintext.capacity();
-    plaintext.reserve_exact(capacity);
-    let result = AesBytesDecrypt {
-        plaintext: plaintext.as_mut_ptr(),
-        length: plaintext.len(),
-    };
-    std::mem::forget(plaintext);
-    return result;
+    match <CASAES256 as CASAES256Encryption>::decrypt_ciphertext(key_slice, nonce_slice, to_decrypt_slice) {
+        Ok(mut plaintext) => {
+            let capacity = plaintext.capacity();
+            plaintext.reserve_exact(capacity);
+            let result = AesBytesDecrypt {
+                plaintext: plaintext.as_mut_ptr(),
+                length: plaintext.len(),
+                error_code: 0,
+            };
+            std::mem::forget(plaintext);
+            result
+        }
+        Err(e) => AesBytesDecrypt {
+            plaintext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }

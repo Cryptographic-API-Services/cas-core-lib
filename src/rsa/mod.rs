@@ -6,15 +6,22 @@ use cas_lib::asymmetric::types::RSAKeyPairResult;
 
 mod types;
 use self::types::{RsaKeyPair, RsaSignBytesResults};
+use crate::helpers::{cas_error_code, CasVerifyResult};
 
 #[no_mangle]
 pub extern "C" fn get_key_pair(key_size: usize) -> RsaKeyPair {
-    let key_pair = <CASRSA as CASRSAEncryption>::generate_rsa_keys(key_size);
-    let result = RsaKeyPair {
-        priv_key: CString::new(key_pair.private_key).unwrap().into_raw(),
-        pub_key: CString::new(key_pair.public_key).unwrap().into_raw()
-    };
-    result
+    match <CASRSA as CASRSAEncryption>::generate_rsa_keys(key_size) {
+        Ok(key_pair) => RsaKeyPair {
+            priv_key: CString::new(key_pair.private_key).unwrap().into_raw(),
+            pub_key: CString::new(key_pair.public_key).unwrap().into_raw(),
+            error_code: 0,
+        },
+        Err(e) => RsaKeyPair {
+            priv_key: std::ptr::null_mut(),
+            pub_key: std::ptr::null_mut(),
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 #[no_mangle]
@@ -36,15 +43,24 @@ pub extern "C" fn rsa_sign_with_key_bytes(
         assert!(!data_to_sign.is_null());
         std::slice::from_raw_parts(data_to_sign, data_to_sign_length)
     }.to_vec();
-    let mut signed_data = <CASRSA as CASRSAEncryption>::sign(private_key_string, data_to_sign_slice);
-    let capacity = signed_data.capacity();
-    signed_data.reserve_exact(capacity);
-    let result = RsaSignBytesResults {
-        signature_raw_ptr: signed_data.as_mut_ptr(),
-        length: signed_data.len(),
-    };
-    std::mem::forget(signed_data);
-    return result;
+    match <CASRSA as CASRSAEncryption>::sign(private_key_string, data_to_sign_slice) {
+        Ok(mut signed_data) => {
+            let capacity = signed_data.capacity();
+            signed_data.reserve_exact(capacity);
+            let result = RsaSignBytesResults {
+                signature_raw_ptr: signed_data.as_mut_ptr(),
+                length: signed_data.len(),
+                error_code: 0,
+            };
+            std::mem::forget(signed_data);
+            result
+        }
+        Err(e) => RsaSignBytesResults {
+            signature_raw_ptr: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 #[no_mangle]
@@ -54,7 +70,7 @@ pub extern "C" fn rsa_verify_bytes(
     data_to_verify_length: usize,
     signature: *const c_uchar,
     signature_length: usize,
-) -> bool {
+) -> CasVerifyResult {
     let public_key_string = unsafe {
         assert!(!public_key.is_null());
 
@@ -73,8 +89,10 @@ pub extern "C" fn rsa_verify_bytes(
         assert!(!signature.is_null());
         std::slice::from_raw_parts(signature, signature_length)
     }.to_vec();
-    let verified = <CASRSA as CASRSAEncryption>::verify(public_key_string, data_to_verify_slice, signature_slice);
-    verified
+    match <CASRSA as CASRSAEncryption>::verify(public_key_string, data_to_verify_slice, signature_slice) {
+        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
+        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
+    }
 }
 
 #[test]

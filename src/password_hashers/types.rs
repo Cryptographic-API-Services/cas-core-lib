@@ -4,4 +4,5 @@ use std::ffi::c_uchar;
 pub struct Argon2KDFAes128 {
     pub key: *mut c_uchar,
     pub length: usize,
+    pub error_code: i32,
 }

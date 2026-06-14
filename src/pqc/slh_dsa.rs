@@ -1,5 +1,6 @@
 use cas_lib::pqc::slh_dsa::{generate_signing_and_verification_key, sign_message, verify_signature};
 use crate::pqc::types::{SlhDsaKeyPairResult, SlhDsaSignature};
+use crate::helpers::{cas_error_code, CasVerifyResult};
 
 #[no_mangle]
 pub extern "C" fn slh_dsa_generate_signing_and_verification_key() -> SlhDsaKeyPairResult {
@@ -32,13 +33,22 @@ pub extern "C" fn slh_dsa_sign_message(
         std::slice::from_raw_parts(message, message_length)
     }
     .to_vec();
-    let signature: Vec<u8> = sign_message(message_slice, signing_key_slice);
-    let result = SlhDsaSignature {
-        signature_ptr: signature.as_ptr(),
-        signature_length: signature.len(),
-    };
-    std::mem::forget(signature);
-    result
+    match sign_message(message_slice, signing_key_slice) {
+        Ok(signature) => {
+            let result = SlhDsaSignature {
+                signature_ptr: signature.as_ptr(),
+                signature_length: signature.len(),
+                error_code: 0,
+            };
+            std::mem::forget(signature);
+            result
+        }
+        Err(e) => SlhDsaSignature {
+            signature_ptr: std::ptr::null(),
+            signature_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
 }
 
 #[no_mangle]
@@ -49,7 +59,7 @@ pub extern "C" fn slh_dsa_verify_signature(
     signature_length: usize,
     message: *const u8,
     message_length: usize,
-) -> bool {
+) -> CasVerifyResult {
     let verification_key_slice = unsafe {
         assert!(!verification_key.is_null());
         std::slice::from_raw_parts(verification_key, verification_key_length)
@@ -65,5 +75,8 @@ pub extern "C" fn slh_dsa_verify_signature(
         std::slice::from_raw_parts(message, message_length)
     }
     .to_vec();
-    verify_signature(message_slice, signature_slice, verification_key_slice)
+    match verify_signature(message_slice, signature_slice, verification_key_slice) {
+        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
+        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
+    }
 }

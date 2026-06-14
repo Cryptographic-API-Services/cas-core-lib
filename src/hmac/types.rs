@@ -4,4 +4,5 @@ use std::ffi::c_uchar;
 pub struct HmacSignByteResult {
     pub result_bytes_ptr: *mut c_uchar,
     pub length: usize,
+    pub error_code: i32,
 }

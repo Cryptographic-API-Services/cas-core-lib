@@ -17,11 +17,13 @@ pub struct HpkeEncrypt {
     pub ciphertext_ptr: *mut c_uchar,
     pub ciphertext_ptr_length: usize,
     pub tag_ptr: *mut c_uchar,
-    pub tag_ptr_length: usize
+    pub tag_ptr_length: usize,
+    pub error_code: i32,
 }
 
 #[repr(C)]
 pub struct HpkeDecrypt {
     pub plaintext_ptr: *mut c_uchar,
-    pub plaintext_ptr_length: usize
+    pub plaintext_ptr_length: usize,
+    pub error_code: i32,
 }

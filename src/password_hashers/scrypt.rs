@@ -1,5 +1,6 @@
 use std::ffi::{c_char, CStr, CString};
 use cas_lib::password_hashers::{scrypt::CASScrypt};
+use crate::helpers::{cas_error_code, CasStringResult, CasVerifyResult};
 
 
 #[no_mangle]
@@ -8,7 +9,7 @@ pub extern "C" fn scrypt_hash_with_parameters(
     cpu_memory_cost: u8,
     block_size: u32,
     parallelism: u32,
-) -> *mut c_char {
+) -> CasStringResult {
     let string_pass = unsafe {
         assert!(!pass_to_hash.is_null());
 
@@ -17,12 +18,14 @@ pub extern "C" fn scrypt_hash_with_parameters(
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = CASScrypt::hash_password_customized(string_pass, cpu_memory_cost, block_size, parallelism);
-    return CString::new(new_hash).unwrap().into_raw();
+    match CASScrypt::hash_password_customized(string_pass, cpu_memory_cost, block_size, parallelism) {
+        Ok(new_hash) => CasStringResult { value: CString::new(new_hash).unwrap().into_raw(), error_code: 0 },
+        Err(e) => CasStringResult { value: std::ptr::null_mut(), error_code: cas_error_code(&e) },
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
+pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> CasStringResult {
     let string_pass = unsafe {
         assert!(!pass_to_hash.is_null());
 
@@ -31,8 +34,10 @@ pub extern "C" fn scrypt_hash(pass_to_hash: *const c_char) -> *mut c_char {
     .to_str()
     .unwrap()
     .to_string();
-    let new_hash = CASScrypt::hash_password(string_pass);
-    return CString::new(new_hash).unwrap().into_raw();
+    match CASScrypt::hash_password(string_pass) {
+        Ok(new_hash) => CasStringResult { value: CString::new(new_hash).unwrap().into_raw(), error_code: 0 },
+        Err(e) => CasStringResult { value: std::ptr::null_mut(), error_code: cas_error_code(&e) },
+    }
 }
 
 #[test]
@@ -42,7 +47,7 @@ fn scrypt_hash_test() {
     let password_bytes = password_cstr.as_bytes_with_nul();
     let password_ptr = password_bytes.as_ptr() as *const i8;
     let hashed = scrypt_hash(password_ptr);
-    let hashed_ctr = unsafe { CString::from_raw(hashed) };
+    let hashed_ctr = unsafe { CString::from_raw(hashed.value) };
     let hashed_str = hashed_ctr.to_str().unwrap();
     assert_ne!(hashed_str, password);
 }
@@ -51,10 +56,10 @@ fn scrypt_hash_test() {
 pub extern "C" fn scrypt_verify(
     hash_to_check: *const c_char,
     pass_to_check: *const c_char,
-) -> bool {
+) -> CasVerifyResult {
     let string_hash = unsafe {
         assert!(!hash_to_check.is_null());
-    
+
         CStr::from_ptr(hash_to_check)
     }
     .to_str()
@@ -70,7 +75,10 @@ pub extern "C" fn scrypt_verify(
     .unwrap()
     .to_string();
 
-    return CASScrypt::verify_password(string_hash, string_pass);
+    match CASScrypt::verify_password(string_hash, string_pass) {
+        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
+        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
+    }
 }
 
 #[test]
@@ -80,9 +88,9 @@ fn scrypt_verify_test() {
     let password_bytes = password_cstr.as_bytes_with_nul();
     let password_ptr = password_bytes.as_ptr() as *const i8;
     let hash = scrypt_hash(password_ptr);
-    let hash_ctr = unsafe { CString::from_raw(hash) };
+    let hash_ctr = unsafe { CString::from_raw(hash.value) };
     let hashed_bytes = hash_ctr.as_bytes_with_nul();
     let hashed_ptr = hashed_bytes.as_ptr() as *const i8;
     let is_valid = scrypt_verify(hashed_ptr, password_ptr);
-    assert_eq!(true, is_valid);
+    assert_eq!(true, is_valid.is_valid);
 }

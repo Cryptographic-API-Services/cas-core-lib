@@ -10,4 +10,5 @@ pub struct SlhDsaKeyPairResult {
 pub struct SlhDsaSignature {
     pub signature_ptr: *const u8,
     pub signature_length: usize,
+    pub error_code: i32,
 }
