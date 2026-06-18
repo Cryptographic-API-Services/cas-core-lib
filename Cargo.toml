@@ -16,3 +16,8 @@ crate-type = ["dylib"]
 libc = "0.2.146"
 cas-lib = "0.2.79"
 zeroizing-alloc = "0.1.0"
+
+[build-dependencies]
+# Generates the C# P/Invoke bindings (NativeMethods.g.cs) consumed by cas-dotnet-sdk
+# directly from this crate's `extern "C"` surface. See issue #190 / cas-core-lib#79.
+csbindgen = "1.9"
