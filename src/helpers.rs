@@ -53,7 +53,7 @@ pub extern "C" fn free_cstring(s: *mut c_char) {
         if s.is_null() {
             return;
         }
-        CString::from_raw(s)
+        drop(CString::from_raw(s));
     };
 }
 

@@ -13,15 +13,3 @@ pub struct RsaSignBytesResults {
     pub length: usize,
     pub error_code: i32,
 }
-
-#[repr(C)]
-pub struct RsaEncryptBytesResult {
-    pub encrypted_result_ptr: *mut c_uchar,
-    pub length: usize,
-}
-
-#[repr(C)]
-pub struct RsaDecryptBytesResult {
-    pub decrypted_result_ptr: *mut c_uchar,
-    pub length: usize,
-}

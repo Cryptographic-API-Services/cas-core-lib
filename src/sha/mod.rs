@@ -1,5 +1,4 @@
-use core::slice;
-use std::{ffi::c_uchar, sync::mpsc};
+use std::ffi::c_uchar;
 
 use cas_lib::hashers::{cas_hasher::CASHasher, sha::CASSHA};
 
