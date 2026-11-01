@@ -15,6 +15,8 @@ pub mod zstd;
 pub mod hpke;
 pub mod pqc {
     pub mod slh_dsa;
+    pub mod ml_dsa;
+    pub mod ml_kem;
     pub mod types;
 }
 
