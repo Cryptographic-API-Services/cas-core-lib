@@ -33,7 +33,7 @@ fn blake2_512_bytes_test() {
     let data_to_hash_bytes = data_to_hash.as_bytes();
     let data_to_hash_length = data_to_hash_bytes.len();
     let result = blake2_512_bytes(data_to_hash_bytes.as_ptr(), data_to_hash_length);
-    let result_slice = unsafe { slice::from_raw_parts(result.result_bytes_ptr, result.length) };
+    let result_slice = unsafe { std::slice::from_raw_parts(result.result_bytes_ptr, result.length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }
 
@@ -85,7 +85,7 @@ fn blake2_256_bytes_test() {
     let data_to_hash_length = data_to_hash_bytes.len();
     let result: Blake2HashByteResult =
         blake2_256_bytes(data_to_hash_bytes.as_ptr(), data_to_hash_length);
-    let result_slice = unsafe { slice::from_raw_parts(result.result_bytes_ptr, result.length) };
+    let result_slice = unsafe { std::slice::from_raw_parts(result.result_bytes_ptr, result.length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }
 
@@ -118,6 +118,6 @@ fn blake2_256_bytes_verify_test() {
     let data_to_hash_length = data_to_hash_bytes.len();
     let result: Blake2HashByteResult =
         blake2_256_bytes(data_to_hash_bytes.as_ptr(), data_to_hash_length);
-    let result_slice = unsafe { slice::from_raw_parts(result.result_bytes_ptr, result.length) };
+    let result_slice = unsafe { std::slice::from_raw_parts(result.result_bytes_ptr, result.length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }

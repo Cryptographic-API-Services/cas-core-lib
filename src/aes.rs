@@ -1,7 +1,7 @@
 use cas_lib::symmetric::{aes::{CASAES128, CASAES256}, cas_symmetric_encryption::{CASAES128Encryption, CASAES256Encryption}};
 use std::ffi::c_uchar;
 
-use crate::helpers::cas_error_code;
+use crate::{helpers::cas_error_code, x25519};
 
 #[repr(C)]
 pub struct AesNonce {

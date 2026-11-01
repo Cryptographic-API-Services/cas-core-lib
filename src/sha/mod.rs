@@ -43,7 +43,7 @@ fn sha512_bytes_test() {
     let data_to_hash_length: usize = data_to_hash_bytes.len();
     let data_to_hash_bytes_ptr = data_to_hash_bytes.as_ptr();
     let result = sha512_bytes(data_to_hash_bytes_ptr, data_to_hash_length);
-    let result_slice = unsafe { slice::from_raw_parts(result.result_bytes_ptr, result.length) };
+    let result_slice = unsafe { std::slice::from_raw_parts(result.result_bytes_ptr, result.length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }
 
@@ -85,6 +85,6 @@ fn sha256_bytes_test() {
     let data_to_hash_length: usize = data_to_hash_bytes.len();
     let data_to_hash_bytes_ptr = data_to_hash_bytes.as_ptr();
     let result = sha256_bytes(data_to_hash_bytes_ptr, data_to_hash_length);
-    let result_slice = unsafe { slice::from_raw_parts(result.result_bytes_ptr, result.length) };
+    let result_slice = unsafe { std::slice::from_raw_parts(result.result_bytes_ptr, result.length) };
     assert_ne!(data_to_hash_bytes, result_slice);
 }
