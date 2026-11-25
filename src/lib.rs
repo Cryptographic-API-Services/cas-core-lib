@@ -13,6 +13,8 @@ pub mod x25519;
 pub mod ascon_aead;
 pub mod zstd;
 pub mod hpke;
+#[cfg(test)]
+mod free_tests;
 pub mod pqc {
     pub mod slh_dsa;
     pub mod ml_dsa;

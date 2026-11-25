@@ -8,6 +8,10 @@ use crate::helpers::{cas_error_code, export_bytes};
 /// accepted range is `0..=MAX_COMPRESSION_LEVEL` (0 selects zstd's default).
 const MAX_COMPRESSION_LEVEL: usize = 22;
 
+/// Output of `compress` / `decompress` / `decompress_with_limit`.
+///
+/// The caller owns `data` and frees it once with `free_bytes`. It is
+/// null when `error_code` is non-zero.
 #[repr(C)]
 pub struct ZstdCompressResult {
     data: *mut c_uchar,

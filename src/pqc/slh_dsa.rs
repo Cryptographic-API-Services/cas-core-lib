@@ -41,7 +41,7 @@ pub extern "C" fn slh_dsa_sign_message(
             result
         }
         Err(e) => SlhDsaSignature {
-            signature_ptr: std::ptr::null(),
+            signature_ptr: std::ptr::null_mut(),
             signature_length: 0,
             error_code: cas_error_code(&e),
         },

@@ -8,6 +8,10 @@ use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes};
 #[cfg(test)]
 use crate::helpers::take_bytes;
 
+/// Ascon-128 ciphertext from `ascon_128_encrypt`.
+///
+/// The caller owns `ciphertext` and frees it once with `free_bytes`. It is
+/// null when `error_code` is non-zero.
 #[repr(C)]
 pub struct Ascon128EncryptResult {
     ciphertext: *mut c_uchar,
@@ -15,6 +19,10 @@ pub struct Ascon128EncryptResult {
     error_code: i32,
 }
 
+/// Ascon-128 plaintext from `ascon_128_decrypt`.
+///
+/// The caller owns `plaintext` and frees it once with `free_bytes`. It is
+/// null when `error_code` is non-zero.
 #[repr(C)]
 pub struct Ascon128DecryptResult {
     plaintext: *mut c_uchar,
@@ -22,12 +30,18 @@ pub struct Ascon128DecryptResult {
     error_code: i32,
 }
 
+/// Ascon-128 key from `ascon_128_key`.
+///
+/// The caller owns `key` (secret) and frees it once with `free_bytes`.
 #[repr(C)]
 pub struct Ascon128Key {
     key: *mut c_uchar,
     length: usize
 }
 
+/// Ascon-128 nonce from `ascon_128_nonce`.
+///
+/// The caller owns `nonce` and frees it once with `free_bytes`.
 #[repr(C)]
 pub struct Ascon128Nonce {
     nonce: *mut c_uchar,
