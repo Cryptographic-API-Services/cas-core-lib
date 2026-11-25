@@ -68,8 +68,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # `library` is the file cargo writes to target/release. The names are
-          # the same for crate-type dylib (today) and cdylib (#102).
+          # `library` is the file cargo writes to target/release for the cdylib.
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             library: libcas_core_lib.so
