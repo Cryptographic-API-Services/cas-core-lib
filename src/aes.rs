@@ -1,7 +1,10 @@
-use cas_lib::symmetric::{aes::{CASAES128, CASAES256}, cas_symmetric_encryption::{CASAES128Encryption, CASAES256Encryption}};
+use cas_lib::error::CasResult;
+use cas_lib::symmetric::{aes::{CASAES128, CASAES256}, cas_symmetric_encryption::{CASAES128AadEncryption, CASAES128Encryption, CASAES256AadEncryption, CASAES256Encryption, CASAeadSeal}};
 use std::ffi::c_uchar;
 
-use crate::{helpers::{cas_error_code, export_bytes}, x25519};
+use crate::{helpers::{bytes_from_ffi, cas_error_code, export_bytes}, x25519};
+#[cfg(test)]
+use crate::helpers::take_bytes;
 
 #[repr(C)]
 pub struct AesNonce {
@@ -361,4 +364,359 @@ pub extern "C" fn aes_256_decrypt_bytes_with_key(
             error_code: cas_error_code(&e),
         },
     }
+}
+
+fn aes_encrypt_result(result: CasResult<Vec<u8>>) -> AesBytesEncrypt {
+    match result {
+        Ok(ciphertext) => {
+            let result = AesBytesEncrypt {
+                ciphertext: export_bytes(&ciphertext),
+                length: ciphertext.len(),
+                error_code: 0,
+            };
+            result
+        }
+        Err(e) => AesBytesEncrypt {
+            ciphertext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
+}
+
+fn aes_decrypt_result(result: CasResult<Vec<u8>>) -> AesBytesDecrypt {
+    match result {
+        Ok(plaintext) => {
+            let result = AesBytesDecrypt {
+                plaintext: export_bytes(&plaintext),
+                length: plaintext.len(),
+                error_code: 0,
+            };
+            result
+        }
+        Err(e) => AesBytesDecrypt {
+            plaintext: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
+}
+
+/// Encrypts `plaintext` with AES-128-GCM under a fresh random nonce and returns
+/// `nonce || ciphertext || tag`. This is the recommended way to encrypt: the
+/// caller never handles a nonce, so it cannot reuse one. Rotate the key well
+/// before about 2^32 messages. `aad` may be empty (a null pointer is accepted
+/// when `aad_length` is 0); the same AAD must be passed to `aes_128_open`.
+#[no_mangle]
+pub extern "C" fn aes_128_seal(
+    key: *const c_uchar,
+    key_length: usize,
+    plaintext: *const c_uchar,
+    plaintext_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesEncrypt {
+    aes_encrypt_result((|| {
+        let key = bytes_from_ffi(key, key_length)?;
+        let plaintext = bytes_from_ffi(plaintext, plaintext_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES128 as CASAeadSeal>::seal(key, plaintext, Some(aad))
+    })())
+}
+
+/// Decrypts a `nonce || ciphertext || tag` blob produced by `aes_128_seal`.
+/// A blob shorter than nonce + tag is `InvalidInput`; a tampered blob or the
+/// wrong AAD is `DecryptionFailed`.
+#[no_mangle]
+pub extern "C" fn aes_128_open(
+    key: *const c_uchar,
+    key_length: usize,
+    sealed: *const c_uchar,
+    sealed_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesDecrypt {
+    aes_decrypt_result((|| {
+        let key = bytes_from_ffi(key, key_length)?;
+        let sealed = bytes_from_ffi(sealed, sealed_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES128 as CASAeadSeal>::open(key, sealed, Some(aad))
+    })())
+}
+
+/// AES-256-GCM version of `aes_128_seal`.
+#[no_mangle]
+pub extern "C" fn aes_256_seal(
+    key: *const c_uchar,
+    key_length: usize,
+    plaintext: *const c_uchar,
+    plaintext_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesEncrypt {
+    aes_encrypt_result((|| {
+        let key = bytes_from_ffi(key, key_length)?;
+        let plaintext = bytes_from_ffi(plaintext, plaintext_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES256 as CASAeadSeal>::seal(key, plaintext, Some(aad))
+    })())
+}
+
+/// AES-256-GCM version of `aes_128_open`.
+#[no_mangle]
+pub extern "C" fn aes_256_open(
+    key: *const c_uchar,
+    key_length: usize,
+    sealed: *const c_uchar,
+    sealed_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesDecrypt {
+    aes_decrypt_result((|| {
+        let key = bytes_from_ffi(key, key_length)?;
+        let sealed = bytes_from_ffi(sealed, sealed_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES256 as CASAeadSeal>::open(key, sealed, Some(aad))
+    })())
+}
+
+/// `aes_128_encrypt_bytes_with_key` with additional authenticated data. Returns
+/// `ciphertext || tag`. The caller supplies the nonce and must never reuse it
+/// under the same key; prefer `aes_128_seal`.
+#[no_mangle]
+pub extern "C" fn aes_128_encrypt_bytes_with_aad(
+    nonce_key: *const c_uchar,
+    nonce_key_length: usize,
+    key: *const c_uchar,
+    key_length: usize,
+    to_encrypt: *const c_uchar,
+    to_encrypt_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesEncrypt {
+    aes_encrypt_result((|| {
+        let nonce = bytes_from_ffi(nonce_key, nonce_key_length)?;
+        let key = bytes_from_ffi(key, key_length)?;
+        let to_encrypt = bytes_from_ffi(to_encrypt, to_encrypt_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES128 as CASAES128AadEncryption>::encrypt_plaintext_with_aad(key, nonce, to_encrypt, aad)
+    })())
+}
+
+/// `aes_128_decrypt_bytes_with_key` with additional authenticated data. The
+/// wrong AAD is `DecryptionFailed`.
+#[no_mangle]
+pub extern "C" fn aes_128_decrypt_bytes_with_aad(
+    nonce_key: *const c_uchar,
+    nonce_key_length: usize,
+    key: *const c_uchar,
+    key_length: usize,
+    to_decrypt: *const c_uchar,
+    to_decrypt_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesDecrypt {
+    aes_decrypt_result((|| {
+        let nonce = bytes_from_ffi(nonce_key, nonce_key_length)?;
+        let key = bytes_from_ffi(key, key_length)?;
+        let to_decrypt = bytes_from_ffi(to_decrypt, to_decrypt_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES128 as CASAES128AadEncryption>::decrypt_ciphertext_with_aad(key, nonce, to_decrypt, aad)
+    })())
+}
+
+/// AES-256-GCM version of `aes_128_encrypt_bytes_with_aad`.
+#[no_mangle]
+pub extern "C" fn aes_256_encrypt_bytes_with_aad(
+    nonce_key: *const c_uchar,
+    nonce_key_length: usize,
+    key: *const c_uchar,
+    key_length: usize,
+    to_encrypt: *const c_uchar,
+    to_encrypt_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesEncrypt {
+    aes_encrypt_result((|| {
+        let nonce = bytes_from_ffi(nonce_key, nonce_key_length)?;
+        let key = bytes_from_ffi(key, key_length)?;
+        let to_encrypt = bytes_from_ffi(to_encrypt, to_encrypt_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES256 as CASAES256AadEncryption>::encrypt_plaintext_with_aad(key, nonce, to_encrypt, aad)
+    })())
+}
+
+/// AES-256-GCM version of `aes_128_decrypt_bytes_with_aad`.
+#[no_mangle]
+pub extern "C" fn aes_256_decrypt_bytes_with_aad(
+    nonce_key: *const c_uchar,
+    nonce_key_length: usize,
+    key: *const c_uchar,
+    key_length: usize,
+    to_decrypt: *const c_uchar,
+    to_decrypt_length: usize,
+    aad: *const c_uchar,
+    aad_length: usize,
+) -> AesBytesDecrypt {
+    aes_decrypt_result((|| {
+        let nonce = bytes_from_ffi(nonce_key, nonce_key_length)?;
+        let key = bytes_from_ffi(key, key_length)?;
+        let to_decrypt = bytes_from_ffi(to_decrypt, to_decrypt_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASAES256 as CASAES256AadEncryption>::decrypt_ciphertext_with_aad(key, nonce, to_decrypt, aad)
+    })())
+}
+
+#[cfg(test)]
+type AesSealFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize) -> AesBytesEncrypt;
+#[cfg(test)]
+type AesOpenFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize) -> AesBytesDecrypt;
+
+// Runs the seal/open checks against one key size.
+#[cfg(test)]
+fn check_aes_seal_open(key: Vec<u8>, nonce_len: usize, seal: AesSealFn, open: AesOpenFn) {
+    use cas_lib::error::CasError;
+    let plaintext = b"WelcomeHome".to_vec();
+    let aad = b"header".to_vec();
+    let do_open = |sealed: &[u8], aad: &[u8]| open(key.as_ptr(), key.len(), sealed.as_ptr(), sealed.len(), aad.as_ptr(), aad.len());
+
+    let sealed = seal(key.as_ptr(), key.len(), plaintext.as_ptr(), plaintext.len(), aad.as_ptr(), aad.len());
+    assert_eq!(0, sealed.error_code);
+    let sealed = take_bytes(sealed.ciphertext, sealed.length);
+    assert_eq!(nonce_len + plaintext.len() + 16, sealed.len());
+
+    // Round trip.
+    let opened = do_open(&sealed, &aad);
+    assert_eq!(0, opened.error_code);
+    assert_eq!(plaintext, take_bytes(opened.plaintext, opened.length));
+
+    // Wrong or missing AAD.
+    for wrong_aad in [&b"other header"[..], &[][..]] {
+        let opened = do_open(&sealed, wrong_aad);
+        assert!(opened.plaintext.is_null());
+        assert_eq!(cas_error_code(&CasError::DecryptionFailed), opened.error_code);
+    }
+
+    // A flipped bit in the nonce, the ciphertext or the tag.
+    for index in [0, nonce_len, sealed.len() - 1] {
+        let mut tampered = sealed.clone();
+        tampered[index] ^= 0x01;
+        let opened = do_open(&tampered, &aad);
+        assert!(opened.plaintext.is_null());
+        assert_eq!(cas_error_code(&CasError::DecryptionFailed), opened.error_code);
+    }
+
+    // Too short to hold a nonce and a tag.
+    let opened = do_open(&sealed[..nonce_len + 15], &aad);
+    assert_eq!(cas_error_code(&CasError::InvalidInput), opened.error_code);
+
+    // A fresh nonce per call.
+    let sealed_again = seal(key.as_ptr(), key.len(), plaintext.as_ptr(), plaintext.len(), aad.as_ptr(), aad.len());
+    assert_ne!(sealed, take_bytes(sealed_again.ciphertext, sealed_again.length));
+
+    // Empty AAD may be passed as a null pointer.
+    let sealed = seal(key.as_ptr(), key.len(), plaintext.as_ptr(), plaintext.len(), std::ptr::null(), 0);
+    let sealed = take_bytes(sealed.ciphertext, sealed.length);
+    let opened = open(key.as_ptr(), key.len(), sealed.as_ptr(), sealed.len(), std::ptr::null(), 0);
+    assert_eq!(plaintext, take_bytes(opened.plaintext, opened.length));
+
+    // A null pointer with a non-zero length is reported, not a panic.
+    let sealed = seal(key.as_ptr(), key.len(), plaintext.as_ptr(), plaintext.len(), std::ptr::null(), 4);
+    assert!(sealed.ciphertext.is_null());
+    assert_eq!(cas_error_code(&CasError::InvalidInput), sealed.error_code);
+
+    // Wrong key length.
+    let short_key = vec![0u8; 5];
+    let sealed = seal(short_key.as_ptr(), short_key.len(), plaintext.as_ptr(), plaintext.len(), aad.as_ptr(), aad.len());
+    assert_eq!(cas_error_code(&CasError::InvalidKey), sealed.error_code);
+}
+
+#[test]
+fn aes_128_seal_open_test() {
+    let key = aes_128_key();
+    check_aes_seal_open(take_bytes(key.key, key.length), CASAES128::NONCE_LEN, aes_128_seal, aes_128_open);
+}
+
+#[test]
+fn aes_256_seal_open_test() {
+    let key = aes_256_key();
+    check_aes_seal_open(take_bytes(key.key, key.length), CASAES256::NONCE_LEN, aes_256_seal, aes_256_open);
+}
+
+#[test]
+fn aes_256_seal_output_opens_with_caller_nonce_api_test() {
+    let key = aes_256_key();
+    let key = take_bytes(key.key, key.length);
+    let plaintext = b"WelcomeHome".to_vec();
+    let aad = b"header".to_vec();
+    let sealed = aes_256_seal(key.as_ptr(), key.len(), plaintext.as_ptr(), plaintext.len(), aad.as_ptr(), aad.len());
+    let sealed = take_bytes(sealed.ciphertext, sealed.length);
+    let (nonce, ciphertext) = sealed.split_at(CASAES256::NONCE_LEN);
+    let decrypted = aes_256_decrypt_bytes_with_aad(nonce.as_ptr(), nonce.len(), key.as_ptr(), key.len(), ciphertext.as_ptr(), ciphertext.len(), aad.as_ptr(), aad.len());
+    assert_eq!(0, decrypted.error_code);
+    assert_eq!(plaintext, take_bytes(decrypted.plaintext, decrypted.length));
+}
+
+#[cfg(test)]
+type AesEncryptAadFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize) -> AesBytesEncrypt;
+#[cfg(test)]
+type AesDecryptAadFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize) -> AesBytesDecrypt;
+#[cfg(test)]
+type AesDecryptFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize) -> AesBytesDecrypt;
+
+// Runs the caller-nonce AAD checks against one key size.
+#[cfg(test)]
+fn check_aes_aad(key: Vec<u8>, encrypt: AesEncryptAadFn, decrypt: AesDecryptAadFn, decrypt_without_aad: AesDecryptFn) {
+    use cas_lib::error::CasError;
+    let nonce = aes_nonce();
+    let nonce = take_bytes(nonce.nonce, nonce.length);
+    let plaintext = b"WelcomeHome".to_vec();
+    let aad = b"record-42".to_vec();
+    let do_decrypt = |ciphertext: &[u8], aad: &[u8]| decrypt(nonce.as_ptr(), nonce.len(), key.as_ptr(), key.len(), ciphertext.as_ptr(), ciphertext.len(), aad.as_ptr(), aad.len());
+
+    let encrypted = encrypt(nonce.as_ptr(), nonce.len(), key.as_ptr(), key.len(), plaintext.as_ptr(), plaintext.len(), aad.as_ptr(), aad.len());
+    assert_eq!(0, encrypted.error_code);
+    let ciphertext = take_bytes(encrypted.ciphertext, encrypted.length);
+
+    // Round trip.
+    let decrypted = do_decrypt(&ciphertext, &aad);
+    assert_eq!(0, decrypted.error_code);
+    assert_eq!(plaintext, take_bytes(decrypted.plaintext, decrypted.length));
+
+    // Wrong or missing AAD.
+    for wrong_aad in [&b"record-43"[..], &[][..]] {
+        let decrypted = do_decrypt(&ciphertext, wrong_aad);
+        assert!(decrypted.plaintext.is_null());
+        assert_eq!(cas_error_code(&CasError::DecryptionFailed), decrypted.error_code);
+    }
+
+    // The non-AAD decrypt does not accept a ciphertext bound to AAD.
+    let decrypted = decrypt_without_aad(nonce.as_ptr(), nonce.len(), key.as_ptr(), key.len(), ciphertext.as_ptr(), ciphertext.len());
+    assert_eq!(cas_error_code(&CasError::DecryptionFailed), decrypted.error_code);
+
+    // A flipped bit in the ciphertext or the tag.
+    for index in [0, ciphertext.len() - 1] {
+        let mut tampered = ciphertext.clone();
+        tampered[index] ^= 0x01;
+        let decrypted = do_decrypt(&tampered, &aad);
+        assert!(decrypted.plaintext.is_null());
+        assert_eq!(cas_error_code(&CasError::DecryptionFailed), decrypted.error_code);
+    }
+
+    // Wrong nonce length.
+    let short_nonce = vec![0u8; 5];
+    let encrypted = encrypt(short_nonce.as_ptr(), short_nonce.len(), key.as_ptr(), key.len(), plaintext.as_ptr(), plaintext.len(), aad.as_ptr(), aad.len());
+    assert_eq!(cas_error_code(&CasError::InvalidNonce), encrypted.error_code);
+}
+
+#[test]
+fn aes_128_encrypt_decrypt_with_aad_test() {
+    let key = aes_128_key();
+    check_aes_aad(take_bytes(key.key, key.length), aes_128_encrypt_bytes_with_aad, aes_128_decrypt_bytes_with_aad, aes_128_decrypt_bytes_with_key);
+}
+
+#[test]
+fn aes_256_encrypt_decrypt_with_aad_test() {
+    let key = aes_256_key();
+    check_aes_aad(take_bytes(key.key, key.length), aes_256_encrypt_bytes_with_aad, aes_256_decrypt_bytes_with_aad, aes_256_decrypt_bytes_with_key);
 }
