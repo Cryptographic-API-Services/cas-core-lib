@@ -11,13 +11,15 @@ The crate compiles to a dynamic library (`crate-type = ["dylib"]`), producing `c
 ## Commands
 
 ```bash
-cargo build              # debug build -> target/debug/
-cargo build --release    # release build (what consumers ship)
-cargo test               # run all tests (each FFI module has inline #[test] fns)
-cargo test <name>        # run a single test by name, e.g. cargo test get_key_pair_test
+cargo build --release --locked    # release build (what consumers ship) -> target/release/
+cargo test --release --locked     # run all tests (each FFI module has inline #[test] fns)
+cargo test --release --locked <name>  # run a single test by name, e.g. get_key_pair_test
+cargo build                       # debug build -> target/debug/ (local iteration only)
 ```
 
-CI (`.github/workflows/`) runs `cargo build --verbose` and `cargo test --verbose` on both `ubuntu-latest` and `windows-latest` for every PR against `main`. There is no linter or formatter step configured — match existing style.
+The toolchain is pinned in `rust-toolchain.toml` (rustup installs it on first use), and `Cargo.lock` is committed. `--locked` makes Cargo fail instead of silently re-resolving when `Cargo.toml` and `Cargo.lock` disagree.
+
+CI (`.github/workflows/*-test-pr.yml`) runs on every PR, whatever the base branch, on `ubuntu-latest`, `windows-latest` and `macos-latest`: `rustup toolchain install` (reads `rust-toolchain.toml`), then `cargo build --release --locked --verbose` and `cargo test --release --locked --verbose`. There is no linter or formatter step configured — match existing style.
 
 ## Architecture & FFI conventions
 
@@ -52,6 +54,11 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 ## Versioning
 
 Versions are bumped by the release PR (see Releases), not by hand: mark FFI-breaking changes with `!` in the PR title. Keep the pinned `cas-lib` dependency version in sync with the behavior the consumer SDKs expect.
+
+- `cas-lib` is pinned exactly (`cas-lib = "=x.y.z"`), so a new cas-lib release never comes in unannounced.
+- `Cargo.lock` is committed and every CI build uses `--locked`: a `Cargo.toml` change without the matching `Cargo.lock` change fails CI. Commit both together.
+- The Rust toolchain is pinned in `rust-toolchain.toml` (same version as cas-lib). Bump it in its own PR.
+- Dependency and toolchain bumps go through PRs (Dependabot, #112), each one a reviewable `Cargo.lock` diff. Don't run a blanket `cargo update` as part of unrelated work.
 
 ## Releases
 
