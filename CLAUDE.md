@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CAS Core Lib is a Rust crate that exposes a C-compatible FFI layer over [`cas-lib`](https://crates.io/crates/cas-lib), the crate that holds the actual cryptographic implementations. This crate itself contains almost no cryptography logic — it is the marshalling boundary that lets higher-level SDKs (.NET, Node.js/TypeScript) call into Rust crypto across the FFI.
 
-The crate compiles to a dynamic library (`crate-type = ["dylib"]`), producing `cas_core_lib.dll` (Windows) / `libcas_core_lib.so` (Linux) that consumers load and bind to.
+The crate compiles to a dynamic library (`crate-type = ["dylib"]`), producing `cas_core_lib.dll` (Windows) / `libcas_core_lib.so` (Linux) / `libcas_core_lib.dylib` (macOS) that consumers load and bind to. Released builds are attached to GitHub Releases (see Releases).
 
 ## Commands
 
@@ -51,4 +51,24 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 
 ## Versioning
 
-When changing the public FFI surface, bump `version` in `Cargo.toml` and keep the pinned `cas-lib` dependency version in sync with the behavior the consumer SDKs expect.
+Versions are bumped by the release PR (see Releases), not by hand: mark FFI-breaking changes with `!` in the PR title. Keep the pinned `cas-lib` dependency version in sync with the behavior the consumer SDKs expect.
+
+## Releases
+
+The crate isn't published to crates.io; a release is a `v<version>` tag plus a GitHub Release carrying the native libraries. Releases are made with [release-please](https://github.com/googleapis/release-please) (`release-type: rust`, configured in `release-please-config.json` like cas-typescript-sdk's), and `CHANGELOG.md` uses cas-lib's format. `.github/workflows/release.yml` runs on every push to `main`:
+
+1. The `release-please` job opens or updates a `chore: release <version>` PR that bumps `Cargo.toml` (and `Cargo.lock`) and `.release-please-manifest.json`, and adds a `CHANGELOG.md` entry built from the Conventional Commit titles since the last release. Edit that PR to polish the entry; don't edit `CHANGELOG.md` entries anywhere else, and never bump `Cargo.toml`'s version by hand.
+2. Merging it makes the job push the `v<version>` tag and create a GitHub Release whose body is that entry (job outputs `release_created` / `tag_name`).
+3. Only then does the `build` matrix run, with a read-only token, on `ubuntu-latest` (x86_64 Linux), `windows-latest` (x86_64 Windows) and `macos-latest` (arm64 macOS). Each job checks out the tag, installs the toolchain from `rust-toolchain.toml`, fails if the tag isn't `v<Cargo.toml version>`, runs `cargo test --release --locked` and then `cargo build --release --locked`, and uploads the library plus the `NativeMethods.g.cs` that `build.rs` generated (in `../cas-dotnet-sdk/generated`, next to the checkout).
+4. The `upload` job runs in the `release` environment with `contents: write` only. It checks that the three `NativeMethods.g.cs` copies are identical (ignoring CRLF), writes `SHA256SUMS`, and attaches `libcas_core_lib.so`, `cas_core_lib.dll`, `libcas_core_lib.dylib`, `NativeMethods.g.cs` and `SHA256SUMS` with `gh release upload`. It never overwrites assets: if it fails halfway, delete the partial assets from the release by hand and rerun the job.
+
+The assets keep the file names cargo produces, which are the names .NET resolves for `[DllImport("cas_core_lib")]`, so cas-dotnet-sdk can vendor them unchanged. They are the same for `crate-type = ["dylib"]` (today) and `cdylib` (#102). When adding a target, add it to the `build` matrix and to the `cp` list in `upload` together; two targets for one OS (e.g. Linux arm64) would need distinct asset names.
+
+`changelog-sections` maps commit types to cas-lib's groups: `feat` → Added, `changed` → Changed, `deprecated` → Deprecated, `fix` → Fixed, `security` → Security, `docs` → Documentation, everything else → Other; `!` commits are also listed under Breaking changes. release-please has no catch-all, so a commit type it doesn't list is left out of the changelog. `bootstrap-sha` is the `main` commit before the first release-please release, and the manifest starts at `0.3.0` (never tagged); add `release-as` to the package in `release-please-config.json` to pin a specific version, and remove it after that release.
+
+The PR that brings an epic branch into `main` must be merged with a **merge commit**, so each sub-PR's squashed Conventional Commit reaches `main` and gets its own changelog line. If it is squashed, put a release-please commit-override block listing every sub-PR title in the squash body; its start marker is `BEGIN_` immediately followed by `COMMIT_OVERRIDE`, and its end marker is the same with `END_`. Never write the literal marker in any other PR body, since release-please would rewrite that PR's changelog line.
+
+Manual setup (repo admin):
+
+- Create the `release` environment in Settings → Environments, ideally with required reviewers. GitHub creates a missing environment on first use, but with no protection rules.
+- Optionally add the `RELEASE_PLEASE_TOKEN` secret (GitHub App or fine-grained PAT with Contents and Pull requests read/write). A release PR opened with the default `GITHUB_TOKEN` doesn't trigger the PR workflows.

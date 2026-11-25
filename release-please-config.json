@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "28c05c287335d87d0647dfd357e64d494005f5b1",
+  "pull-request-title-pattern": "chore: release ${version}",
+  "packages": {
+    ".": {
+      "release-type": "rust",
+      "package-name": "cas_core_lib",
+      "include-component-in-tag": false,
+      "changelog-path": "CHANGELOG.md",
+      "changelog-sections": [
+        { "type": "feat", "section": "Added" },
+        { "type": "changed", "section": "Changed" },
+        { "type": "deprecated", "section": "Deprecated" },
+        { "type": "fix", "section": "Fixed" },
+        { "type": "security", "section": "Security" },
+        { "type": "docs", "section": "Documentation" },
+        { "type": "perf", "section": "Other" },
+        { "type": "refactor", "section": "Other" },
+        { "type": "test", "section": "Other" },
+        { "type": "ci", "section": "Other" },
+        { "type": "build", "section": "Other" },
+        { "type": "chore", "section": "Other" },
+        { "type": "revert", "section": "Other" }
+      ]
+    }
+  }
+}
