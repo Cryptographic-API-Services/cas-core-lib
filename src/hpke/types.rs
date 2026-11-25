@@ -79,6 +79,8 @@ fn free_hpke_results_test() {
         key_pair.public_key_ptr_length,
         key_pair.info_str_ptr,
         key_pair.info_str_ptr_length,
+        std::ptr::null(),
+        0,
     );
     assert_eq!(0, encrypted.error_code);
     let decrypted = hpke_decrypt(
@@ -92,6 +94,8 @@ fn free_hpke_results_test() {
         encrypted.tag_ptr_length,
         key_pair.info_str_ptr,
         key_pair.info_str_ptr_length,
+        std::ptr::null(),
+        0,
     );
     assert_eq!(0, decrypted.error_code);
     free_bytes(decrypted.plaintext_ptr);
