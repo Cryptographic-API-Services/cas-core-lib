@@ -4,6 +4,7 @@ use cas_lib::hashers::{blake2::CASBlake2, cas_hasher::CASHasher};
 
 mod types;
 use self::types::Blake2HashByteResult;
+use crate::helpers::export_bytes;
 
 #[no_mangle]
 pub extern "C" fn blake2_512_bytes(
@@ -16,14 +17,11 @@ pub extern "C" fn blake2_512_bytes(
     }
     .to_vec();
 
-    let mut result: Vec<u8> = <CASBlake2 as CASHasher>::hash_512(data_slice);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
+    let result: Vec<u8> = <CASBlake2 as CASHasher>::hash_512(data_slice);
     let return_result = Blake2HashByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
+        result_bytes_ptr: export_bytes(&result),
         length: result.len(),
     };
-    std::mem::forget(result);
     return_result
 }
 
@@ -67,14 +65,11 @@ pub extern "C" fn blake2_256_bytes(
         std::slice::from_raw_parts(data_to_hash, data_to_hash_length)
     }
     .to_vec();
-    let mut result = <CASBlake2 as CASHasher>::hash_256(data_to_hash_slice);
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
+    let result = <CASBlake2 as CASHasher>::hash_256(data_to_hash_slice);
     let return_result = Blake2HashByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
+        result_bytes_ptr: export_bytes(&result),
         length: result.len(),
     };
-    std::mem::forget(result);
     return return_result;
 }
 

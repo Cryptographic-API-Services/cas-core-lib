@@ -3,30 +3,21 @@ use std::ffi::c_uchar;
 use cas_lib::hybrid::{cas_hybrid::CASHybrid, hpke::CASHPKE};
 use types::{HpkeDecrypt, HpkeEncrypt, HpkeKeyPair};
 
-use crate::helpers::cas_error_code;
+use crate::helpers::{cas_error_code, export_bytes};
 
 mod types;
 
 #[no_mangle]
 pub extern "C" fn hpke_generate_keypair() -> HpkeKeyPair {
-    let (mut private_key, mut public_key, mut info_str) = <CASHPKE as CASHybrid>::generate_key_pair();
-    let private_key_capacity = private_key.capacity();
-    private_key.reserve_exact(private_key_capacity);
-    let public_key_capacity = public_key.capacity();
-    public_key.reserve_exact(public_key_capacity);
-    let info_str_capacity = info_str.capacity();
-    info_str.reserve_exact(info_str_capacity);
+    let (private_key, public_key, info_str) = <CASHPKE as CASHybrid>::generate_key_pair();
     let return_result = HpkeKeyPair {
-        private_key_ptr: private_key.as_mut_ptr(),
+        private_key_ptr: export_bytes(&private_key),
         private_key_ptr_length: private_key.len(),
-        public_key_ptr: public_key.as_mut_ptr(),
+        public_key_ptr: export_bytes(&public_key),
         public_key_ptr_length: public_key.len(),
-        info_str_ptr: info_str.as_mut_ptr(),
+        info_str_ptr: export_bytes(&info_str),
         info_str_ptr_length: info_str.len()
     };
-    std::mem::forget(private_key);
-    std::mem::forget(public_key);
-    std::mem::forget(info_str);
     return_result
 }
 
@@ -43,25 +34,16 @@ pub extern "C" fn hpke_encrypt(
     let public_key = unsafe { std::slice::from_raw_parts(public_key, public_keylength) }.to_vec();
     let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
     match <CASHPKE as CASHybrid>::encrypt(plaintext, public_key, info_str) {
-        Ok((mut encapped_key, mut ciphertext, mut tag)) => {
-            let encapped_key_capacity = encapped_key.capacity();
-            encapped_key.reserve_exact(encapped_key_capacity);
-            let ciphertext_capacity = ciphertext.capacity();
-            ciphertext.reserve_exact(ciphertext_capacity);
-            let tag_capacity = tag.capacity();
-            tag.reserve_exact(tag_capacity);
+        Ok((encapped_key, ciphertext, tag)) => {
             let return_result = HpkeEncrypt {
-                encapped_key_ptr: encapped_key.as_mut_ptr(),
+                encapped_key_ptr: export_bytes(&encapped_key),
                 encapped_key_ptr_length: encapped_key.len(),
-                ciphertext_ptr: ciphertext.as_mut_ptr(),
+                ciphertext_ptr: export_bytes(&ciphertext),
                 ciphertext_ptr_length: ciphertext.len(),
-                tag_ptr: tag.as_mut_ptr(),
+                tag_ptr: export_bytes(&tag),
                 tag_ptr_length: tag.len(),
                 error_code: 0,
             };
-            std::mem::forget(encapped_key);
-            std::mem::forget(ciphertext);
-            std::mem::forget(tag);
             return_result
         }
         Err(e) => HpkeEncrypt {
@@ -95,15 +77,12 @@ pub extern "C" fn hpke_decrypt(
     let tag = unsafe { std::slice::from_raw_parts(tag, tag_length)}.to_vec();
     let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
     match <CASHPKE as CASHybrid>::decrypt(ciphertext, private_key, encapped_key, tag, info_str) {
-        Ok(mut plaintext) => {
-            let plaintext_capacity = plaintext.capacity();
-            plaintext.reserve_exact(plaintext_capacity);
+        Ok(plaintext) => {
             let return_result = HpkeDecrypt {
-                plaintext_ptr: plaintext.as_mut_ptr(),
+                plaintext_ptr: export_bytes(&plaintext),
                 plaintext_ptr_length: plaintext.len(),
                 error_code: 0,
             };
-            std::mem::forget(plaintext);
             return_result
         }
         Err(e) => HpkeDecrypt {

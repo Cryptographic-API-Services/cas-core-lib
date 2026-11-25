@@ -1,7 +1,7 @@
 use cas_lib::signatures::ed25519::{ed25519_sign_with_key_pair,  ed25519_verify_with_key_pair,  ed25519_verify_with_public_key,  get_ed25519_key_pair};
 use libc::c_uchar;
 
-use crate::helpers::{cas_error_code, CasVerifyResult};
+use crate::helpers::{cas_error_code, export_bytes, CasVerifyResult};
 
 #[repr(C)]
 pub struct Ed25519KeyPairBytesResult {
@@ -22,19 +22,13 @@ pub struct Ed25519ByteSignatureResult {
 
 #[no_mangle]
 pub extern "C" fn get_ed25519_key_pair_bytes() -> Ed25519KeyPairBytesResult {
-    let mut keypair = get_ed25519_key_pair();
-    let signing_key_capacity = keypair.key_pair.capacity();
-    keypair.key_pair.reserve_exact(signing_key_capacity);
-    let verifying_key_capacity = keypair.public_key.capacity();
-    keypair.public_key.reserve_exact(verifying_key_capacity);
+    let keypair = get_ed25519_key_pair();
     let result = Ed25519KeyPairBytesResult {
         signing_key_length: keypair.key_pair.len(),
-        signing_key: keypair.key_pair.as_mut_ptr(),
+        signing_key: export_bytes(&keypair.key_pair),
         verifying_key_length: keypair.public_key.len(),
-        verifying_key: keypair.public_key.as_mut_ptr(),
+        verifying_key: export_bytes(&keypair.public_key),
     };
-    std::mem::forget(keypair.key_pair);
-    std::mem::forget(keypair.public_key);
     result
 }
 
@@ -67,21 +61,15 @@ pub extern "C" fn sign_with_key_pair_bytes(
     .to_vec();
     match ed25519_sign_with_key_pair(key_pair_slice, message_to_sign_slice) {
         Ok(result) => {
-            let mut public_key = result.public_key;
-            let public_key_capacity = public_key.capacity();
-            public_key.reserve_exact(public_key_capacity);
-            let mut signature = result.signature;
-            let siganture_capacity = signature.capacity();
-            signature.reserve_exact(siganture_capacity);
+            let public_key = result.public_key;
+            let signature = result.signature;
             let result = Ed25519ByteSignatureResult {
-                signature_byte_ptr: signature.as_mut_ptr(),
+                signature_byte_ptr: export_bytes(&signature),
                 signature_length: signature.len(),
-                public_key: public_key.as_mut_ptr(),
+                public_key: export_bytes(&public_key),
                 public_key_length: public_key.len(),
                 error_code: 0,
             };
-            std::mem::forget(public_key);
-            std::mem::forget(signature);
             result
         }
         Err(e) => Ed25519ByteSignatureResult {

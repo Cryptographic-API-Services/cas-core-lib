@@ -2,7 +2,7 @@ use std::ffi::c_uchar;
 use cas_lib::sponges::ascon_aead::AsconAead;
 use cas_lib::sponges::cas_ascon_aead::{CASAsconAead};
 
-use crate::helpers::cas_error_code;
+use crate::helpers::{cas_error_code, export_bytes};
 
 #[repr(C)]
 pub struct Ascon128EncryptResult {
@@ -32,14 +32,11 @@ pub struct Ascon128Nonce {
 
 #[no_mangle]
 pub extern "C" fn ascon_128_key() -> Ascon128Key {
-    let mut key = <AsconAead as CASAsconAead>::generate_key();
-    let capacity = key.capacity();
-    key.reserve_exact(capacity);
+    let key = <AsconAead as CASAsconAead>::generate_key();
     let result = Ascon128Key {
-        key: key.as_mut_ptr(),
+        key: export_bytes(&key),
         length: key.len()
     };
-    std::mem::forget(key);
     result
 }
 
@@ -47,14 +44,11 @@ pub extern "C" fn ascon_128_key() -> Ascon128Key {
 
 #[no_mangle]
 pub extern "C" fn ascon_128_nonce() -> Ascon128Nonce {
-    let mut nonce = <AsconAead as CASAsconAead>::generate_nonce();
-    let capacity = nonce.capacity();
-    nonce.reserve_exact(capacity);
+    let nonce = <AsconAead as CASAsconAead>::generate_nonce();
     let result = Ascon128Nonce {
-        nonce: nonce.as_mut_ptr(),
+        nonce: export_bytes(&nonce),
         length: nonce.len()
     };
-    std::mem::forget(nonce);
     result
 }
 
@@ -72,15 +66,12 @@ pub extern "C" fn ascon_128_encrypt(
     let key = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
     let to_encrypt = unsafe { std::slice::from_raw_parts(to_encrypt, to_encrypt_length) }.to_vec();
     match <AsconAead as CASAsconAead>::encrypt(key, nonce_key, to_encrypt) {
-        Ok(mut ciphertext) => {
-            let capacity = ciphertext.capacity();
-            ciphertext.reserve_exact(capacity);
+        Ok(ciphertext) => {
             let result = Ascon128EncryptResult {
-                ciphertext: ciphertext.as_mut_ptr(),
+                ciphertext: export_bytes(&ciphertext),
                 length: ciphertext.len(),
                 error_code: 0,
             };
-            std::mem::forget(ciphertext);
             result
         }
         Err(e) => Ascon128EncryptResult {
@@ -107,15 +98,12 @@ pub extern "C" fn ascon_128_decrypt(
     let key = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
     let to_decrypt = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) }.to_vec();
     match <AsconAead as CASAsconAead>::decrypt(key, nonce_key, to_decrypt) {
-        Ok(mut plaintext) => {
-            let capacity = plaintext.capacity();
-            plaintext.reserve_exact(capacity);
+        Ok(plaintext) => {
             let result = Ascon128DecryptResult {
-                plaintext: plaintext.as_mut_ptr(),
+                plaintext: export_bytes(&plaintext),
                 length: plaintext.len(),
                 error_code: 0,
             };
-            std::mem::forget(plaintext);
             result
         }
         Err(e) => Ascon128DecryptResult {

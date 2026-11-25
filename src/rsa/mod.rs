@@ -5,7 +5,7 @@ use cas_lib::asymmetric::cas_rsa::CASRSA;
 
 mod types;
 use self::types::{RsaKeyPair, RsaSignBytesResults};
-use crate::helpers::{cas_error_code, CasVerifyResult};
+use crate::helpers::{cas_error_code, export_bytes, CasVerifyResult};
 
 #[no_mangle]
 pub extern "C" fn get_key_pair(key_size: usize) -> RsaKeyPair {
@@ -43,15 +43,12 @@ pub extern "C" fn rsa_sign_with_key_bytes(
         std::slice::from_raw_parts(data_to_sign, data_to_sign_length)
     }.to_vec();
     match <CASRSA as CASRSAEncryption>::sign(private_key_string, data_to_sign_slice) {
-        Ok(mut signed_data) => {
-            let capacity = signed_data.capacity();
-            signed_data.reserve_exact(capacity);
+        Ok(signed_data) => {
             let result = RsaSignBytesResults {
-                signature_raw_ptr: signed_data.as_mut_ptr(),
+                signature_raw_ptr: export_bytes(&signed_data),
                 length: signed_data.len(),
                 error_code: 0,
             };
-            std::mem::forget(signed_data);
             result
         }
         Err(e) => RsaSignBytesResults {

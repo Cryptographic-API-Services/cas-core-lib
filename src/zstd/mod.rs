@@ -1,7 +1,7 @@
 use cas_lib::compression::zstd;
 use libc::c_uchar;
 
-use crate::helpers::cas_error_code;
+use crate::helpers::{cas_error_code, export_bytes};
 
 #[repr(C)]
 pub struct ZstdCompressResult {
@@ -14,15 +14,12 @@ pub struct ZstdCompressResult {
 pub extern "C" fn decompress(data_to_decompress: *const c_uchar, data_to_decompress_length: usize) -> ZstdCompressResult {
     let data_to_decompress = unsafe { std::slice::from_raw_parts(data_to_decompress, data_to_decompress_length) }.to_vec();
     match zstd::decompress(data_to_decompress) {
-        Ok(mut decompressed_data) => {
-            let capacity = decompressed_data.capacity();
-            decompressed_data.reserve_exact(capacity);
+        Ok(decompressed_data) => {
             let result = ZstdCompressResult {
-                data: decompressed_data.as_mut_ptr(),
+                data: export_bytes(&decompressed_data),
                 length: decompressed_data.len(),
                 error_code: 0,
             };
-            std::mem::forget(decompressed_data);
             result
         }
         Err(e) => ZstdCompressResult {
@@ -37,15 +34,12 @@ pub extern "C" fn decompress(data_to_decompress: *const c_uchar, data_to_decompr
 pub extern "C" fn compress(data_to_compress: *const c_uchar, data_to_compress_length: usize, level: usize) -> ZstdCompressResult {
     let data_to_compress = unsafe { std::slice::from_raw_parts(data_to_compress, data_to_compress_length) }.to_vec();
     match zstd::compress(data_to_compress, level as i32) {
-        Ok(mut compressed_data) => {
-            let capacity = compressed_data.capacity();
-            compressed_data.reserve_exact(capacity);
+        Ok(compressed_data) => {
             let result = ZstdCompressResult {
-                data: compressed_data.as_mut_ptr(),
+                data: export_bytes(&compressed_data),
                 length: compressed_data.len(),
                 error_code: 0,
             };
-            std::mem::forget(compressed_data);
             result
         }
         Err(e) => ZstdCompressResult {

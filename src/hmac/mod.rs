@@ -2,7 +2,7 @@ use cas_lib::message::{cas_hmac::CASHMAC, hmac::HMAC};
 use libc::c_uchar;
 
 use self::types::HmacSignByteResult;
-use crate::helpers::{cas_error_code, CasVerifyResult};
+use crate::helpers::{cas_error_code, export_bytes, CasVerifyResult};
 
 mod types;
 
@@ -19,15 +19,12 @@ pub extern "C" fn hmac_sign_bytes(
     let message_slice: Vec<u8> =
         unsafe { std::slice::from_raw_parts(message, message_length) }.to_vec();
     match <HMAC as CASHMAC>::sign(key_slice, message_slice) {
-        Ok(mut result) => {
-            let capacity = result.capacity();
-            result.reserve_exact(capacity);
+        Ok(result) => {
             let return_result = HmacSignByteResult {
-                result_bytes_ptr: result.as_mut_ptr(),
+                result_bytes_ptr: export_bytes(&result),
                 length: result.len(),
                 error_code: 0,
             };
-            std::mem::forget(result);
             return_result
         }
         Err(e) => HmacSignByteResult {

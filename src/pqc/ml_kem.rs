@@ -1,18 +1,16 @@
 use cas_lib::pqc::ml_kem::{ml_kem_1024_decapsulate, ml_kem_1024_encapsulate, ml_kem_1024_generate};
 use crate::pqc::types::{MlKemDecapsulateResult, MlKemEncapsulateResult, MlKemKeyPairResult};
-use crate::helpers::cas_error_code;
+use crate::helpers::{cas_error_code, export_bytes};
 
 #[no_mangle]
 pub extern "C" fn ml_kem_1024_generate_key_pair() -> MlKemKeyPairResult {
     let key_pair: cas_lib::pqc::cas_pqc::MlKemKeyPair = ml_kem_1024_generate();
     let result = MlKemKeyPairResult {
-        secret_key_ptr: key_pair.secret_key.as_ptr(),
+        secret_key_ptr: export_bytes(&key_pair.secret_key),
         secret_key_length: key_pair.secret_key.len(),
-        public_key_ptr: key_pair.public_key.as_ptr(),
+        public_key_ptr: export_bytes(&key_pair.public_key),
         public_key_length: key_pair.public_key.len(),
     };
-    std::mem::forget(key_pair.secret_key);
-    std::mem::forget(key_pair.public_key);
     result
 }
 
@@ -29,14 +27,12 @@ pub extern "C" fn ml_kem_1024_encapsulate_shared_secret(
     match ml_kem_1024_encapsulate(public_key_slice) {
         Ok(encap) => {
             let result = MlKemEncapsulateResult {
-                ciphertext_ptr: encap.ciphertext.as_ptr(),
+                ciphertext_ptr: export_bytes(&encap.ciphertext),
                 ciphertext_length: encap.ciphertext.len(),
-                shared_secret_ptr: encap.shared_secret.as_ptr(),
+                shared_secret_ptr: export_bytes(&encap.shared_secret),
                 shared_secret_length: encap.shared_secret.len(),
                 error_code: 0,
             };
-            std::mem::forget(encap.ciphertext);
-            std::mem::forget(encap.shared_secret);
             result
         }
         Err(e) => MlKemEncapsulateResult {
@@ -69,11 +65,10 @@ pub extern "C" fn ml_kem_1024_decapsulate_shared_secret(
     match ml_kem_1024_decapsulate(secret_key_slice, ciphertext_slice) {
         Ok(shared_secret) => {
             let result = MlKemDecapsulateResult {
-                shared_secret_ptr: shared_secret.as_ptr(),
+                shared_secret_ptr: export_bytes(&shared_secret),
                 shared_secret_length: shared_secret.len(),
                 error_code: 0,
             };
-            std::mem::forget(shared_secret);
             result
         }
         Err(e) => MlKemDecapsulateResult {
