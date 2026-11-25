@@ -45,6 +45,10 @@ Every public function follows one rigid pattern. When adding or editing a functi
 
 Tests live inline in the same files as `#[test]` functions and typically exercise a full round-trip (e.g. generate key -> encrypt -> decrypt -> assert equality), calling the FFI functions directly.
 
+## PR titles
+
+PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): summary`, `!` after the type for a breaking change), e.g. `fix(rsa): reject keys under 2048 bits`. PRs are squash-merged, so the title becomes the commit message and the `CHANGELOG.md` line. [`.github/workflows/pr-title.yml`](.github/workflows/pr-title.yml) checks it; allowed types: `feat`, `fix`, `security`, `changed`, `deprecated`, `docs`, `perf`, `refactor`, `test`, `ci`, `build`, `chore`, `revert`.
+
 ## Versioning
 
 When changing the public FFI surface, bump `version` in `Cargo.toml` and keep the pinned `cas-lib` dependency version in sync with the behavior the consumer SDKs expect.
