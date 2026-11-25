@@ -52,7 +52,14 @@ fn free_aes_results_test() {
         aes::aes_128_key_from_x25519_diffie_hellman_shared_secret,
         aes::aes_256_key_from_x25519_diffie_hellman_shared_secret,
     ] {
-        let derived = derive(shared_secret.shared_secret, shared_secret.shared_secret_length);
+        let derived = derive(
+            shared_secret.shared_secret,
+            shared_secret.shared_secret_length,
+            alice.public_key,
+            alice.public_key_length,
+            bob.public_key,
+            bob.public_key_length,
+        );
         assert_eq!(0, derived.error_code);
         free_bytes(derived.aes_key_ptr);
     }

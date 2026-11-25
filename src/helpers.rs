@@ -197,7 +197,7 @@ fn free_bytes_releases_ffi_results_test() {
     free_bytes(ml_kem_keys.public_key_ptr);
 
     let password = CString::new("DoNotUseThisPassword").unwrap();
-    let hash = crate::password_hashers::argon2::argon2_hash_password_parameters(1024, 2, 1, password.as_ptr());
+    let hash = crate::password_hashers::argon2::argon2_hash_password_parameters(19, 2, 1, password.as_ptr());
     assert_eq!(hash.error_code, 0);
     let kdf = crate::password_hashers::argon2::argon2_derive_aes_256_key(hash.value);
     assert_eq!(kdf.error_code, 0);

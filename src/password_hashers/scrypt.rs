@@ -2,7 +2,9 @@ use std::ffi::{c_char, CStr, CString};
 use cas_lib::password_hashers::{scrypt::CASScrypt};
 use crate::helpers::{cas_error_code, CasStringResult, CasVerifyResult};
 
-
+/// Hashes with scrypt. `cpu_memory_cost` is log₂N (10–20), `block_size` (`r`)
+/// 1–32 and `parallelism` (`p`) 1–16; scrypt also needs log₂N < 16·r.
+/// Out-of-range values return `InvalidParameters` (6).
 #[no_mangle]
 pub extern "C" fn scrypt_hash_with_parameters(
     pass_to_hash: *const c_char,
@@ -93,4 +95,36 @@ fn scrypt_verify_test() {
     let hashed_ptr = hashed_bytes.as_ptr() as *const i8;
     let is_valid = scrypt_verify(hashed_ptr, password_ptr);
     assert_eq!(true, is_valid.is_valid);
+}
+
+#[test]
+fn scrypt_hash_with_parameters_bounds_test() {
+    let invalid_parameters = cas_error_code(&cas_lib::error::CasError::InvalidParameters);
+    let password = CString::new("DoNotUseThisPassword").unwrap();
+    for (log_n, r, p) in [(9, 8, 1), (21, 8, 1), (63, 8, 1), (10, 0, 1), (10, 33, 1), (10, 8, 0), (10, 8, 17)] {
+        let hash = scrypt_hash_with_parameters(password.as_ptr(), log_n, r, p);
+        assert!(hash.value.is_null());
+        assert_eq!(invalid_parameters, hash.error_code);
+    }
+    let hash = scrypt_hash_with_parameters(password.as_ptr(), 10, 8, 1);
+    assert_eq!(0, hash.error_code);
+    let is_valid = scrypt_verify(hash.value, password.as_ptr());
+    assert_eq!(0, is_valid.error_code);
+    assert!(is_valid.is_valid);
+    unsafe { drop(CString::from_raw(hash.value)) };
+}
+
+#[test]
+fn scrypt_verify_refuses_hostile_stored_hash_test() {
+    let invalid_parameters = cas_error_code(&cas_lib::error::CasError::InvalidParameters);
+    let password = CString::new("DoNotUseThisPassword").unwrap();
+    let hash = scrypt_hash_with_parameters(password.as_ptr(), 10, 8, 1);
+    let hash_string = unsafe { CString::from_raw(hash.value) }.into_string().unwrap();
+    assert!(hash_string.contains("ln=10,r=8,p=1"));
+    for hostile_params in ["ln=21,r=8,p=1", "ln=10,r=33,p=1", "ln=10,r=8,p=17"] {
+        let hostile = CString::new(hash_string.replace("ln=10,r=8,p=1", hostile_params)).unwrap();
+        let is_valid = scrypt_verify(hostile.as_ptr(), password.as_ptr());
+        assert!(!is_valid.is_valid);
+        assert_eq!(invalid_parameters, is_valid.error_code);
+    }
 }
