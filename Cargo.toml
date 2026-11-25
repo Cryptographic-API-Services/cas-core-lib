@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 libc = "0.2.146"
-cas-lib = "=0.5.1"
+cas-lib = "=0.6.0"
 zeroizing-alloc = "0.1.0"
 
 [build-dependencies]

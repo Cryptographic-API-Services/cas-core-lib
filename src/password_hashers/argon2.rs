@@ -1,8 +1,21 @@
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_uchar, CStr, CString};
+use cas_lib::error::{CasError, CasResult};
 use cas_lib::password_hashers::argon2::CASArgon;
 
-use super::types::Argon2KDFAes128;
+use super::types::{Argon2DerivedKey, Argon2KDFAes128, Argon2Salt};
 use crate::helpers::{cas_error_code, export_bytes, CasStringResult, CasVerifyResult};
+
+/// Rebuilds an input buffer from a pointer + length pair. A null pointer is
+/// accepted for a zero-length buffer and is `InvalidInput` otherwise.
+fn input_bytes(ptr: *const c_uchar, len: usize) -> CasResult<Vec<u8>> {
+    if len == 0 {
+        return Ok(Vec::new());
+    }
+    if ptr.is_null() {
+        return Err(CasError::InvalidInput);
+    }
+    Ok(unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec())
+}
 
 /// Hashes with Argon2id. `memory_cost` is in **MiB** (19–4096), `iterations`
 /// 1–10 and `parallelism` 1–16. Out-of-range values return
@@ -36,6 +49,75 @@ fn argon2_hash_password_parameters_test() {
     assert_ne!(hash_str, password);
 }
 
+/// Returns a random 16-byte salt for `argon2_derive_aes_128_key_with_salt` and
+/// `argon2_derive_aes_256_key_with_salt`. The salt is not secret: store it next to
+/// whatever the key protects and pass it back to re-derive the same key.
+#[no_mangle]
+pub extern "C" fn argon2_generate_salt() -> Argon2Salt {
+    let salt = CASArgon::generate_salt();
+    Argon2Salt {
+        salt: export_bytes(&salt),
+        length: salt.len(),
+    }
+}
+
+fn derive_key_with_salt(
+    derive: fn(Vec<u8>, Vec<u8>) -> CasResult<Vec<u8>>,
+    password: *const c_uchar,
+    password_length: usize,
+    salt: *const c_uchar,
+    salt_length: usize,
+) -> Argon2DerivedKey {
+    let result = input_bytes(password, password_length)
+        .and_then(|password| Ok((password, input_bytes(salt, salt_length)?)))
+        .and_then(|(password, salt)| derive(password, salt));
+    match result {
+        Ok(key) => Argon2DerivedKey {
+            key: export_bytes(&key),
+            length: key.len(),
+            error_code: 0,
+        },
+        Err(e) => Argon2DerivedKey {
+            key: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
+}
+
+/// Derives a 16-byte AES-128 key from a password and salt with Argon2id (19 MiB,
+/// 2 iterations, parallelism 1). The same password and salt always give the same
+/// key. A salt shorter than 16 bytes returns `InvalidParameters` (6); a null
+/// pointer with a non-zero length returns `InvalidInput` (4).
+#[no_mangle]
+pub extern "C" fn argon2_derive_aes_128_key_with_salt(
+    password: *const c_uchar,
+    password_length: usize,
+    salt: *const c_uchar,
+    salt_length: usize,
+) -> Argon2DerivedKey {
+    derive_key_with_salt(CASArgon::derive_aes_128_key_with_salt, password, password_length, salt, salt_length)
+}
+
+/// Derives a 32-byte AES-256 key from a password and salt with Argon2id (19 MiB,
+/// 2 iterations, parallelism 1). The same password and salt always give the same
+/// key. A salt shorter than 16 bytes returns `InvalidParameters` (6); a null
+/// pointer with a non-zero length returns `InvalidInput` (4).
+#[no_mangle]
+pub extern "C" fn argon2_derive_aes_256_key_with_salt(
+    password: *const c_uchar,
+    password_length: usize,
+    salt: *const c_uchar,
+    salt_length: usize,
+) -> Argon2DerivedKey {
+    derive_key_with_salt(CASArgon::derive_aes_256_key_with_salt, password, password_length, salt, salt_length)
+}
+
+/// Deprecated: derives an AES-128 key with a random salt that is thrown away, so
+/// the same password never gives the same key again. Use `argon2_generate_salt`
+/// and `argon2_derive_aes_128_key_with_salt`.
+#[deprecated(note = "the salt is discarded, so the key can't be re-derived; use argon2_generate_salt and argon2_derive_aes_128_key_with_salt")]
+#[allow(deprecated)]
 #[no_mangle]
 pub extern "C" fn argon2_derive_aes_128_key(hashed_password: *const c_char) -> Argon2KDFAes128 {
     let hashed_password_bytes = unsafe {
@@ -59,6 +141,11 @@ pub extern "C" fn argon2_derive_aes_128_key(hashed_password: *const c_char) -> A
     }
 }
 
+/// Deprecated: derives an AES-256 key with a random salt that is thrown away, so
+/// the same password never gives the same key again. Use `argon2_generate_salt`
+/// and `argon2_derive_aes_256_key_with_salt`.
+#[deprecated(note = "the salt is discarded, so the key can't be re-derived; use argon2_generate_salt and argon2_derive_aes_256_key_with_salt")]
+#[allow(deprecated)]
 #[no_mangle]
 pub extern "C" fn argon2_derive_aes_256_key(hashed_password: *const c_char) -> Argon2KDFAes128 {
     let hashed_password_bytes = unsafe {
@@ -178,5 +265,74 @@ fn argon2_verify_refuses_hostile_stored_hash_test() {
         let is_valid = argon2_verify(hostile.as_ptr(), password.as_ptr());
         assert!(!is_valid.is_valid);
         assert_eq!(invalid_parameters, is_valid.error_code);
+    }
+}
+
+#[test]
+fn argon2_generate_salt_test() {
+    let first = argon2_generate_salt();
+    let second = argon2_generate_salt();
+    assert_eq!(16, first.length);
+    assert_eq!(16, second.length);
+    let first_bytes = unsafe { std::slice::from_raw_parts(first.salt, first.length) }.to_vec();
+    let second_bytes = unsafe { std::slice::from_raw_parts(second.salt, second.length) }.to_vec();
+    assert_ne!(first_bytes, second_bytes);
+    crate::helpers::free_bytes(first.salt);
+    crate::helpers::free_bytes(second.salt);
+}
+
+#[cfg(test)]
+fn derived_key_bytes(result: Argon2DerivedKey) -> Vec<u8> {
+    assert_eq!(0, result.error_code);
+    let key = unsafe { std::slice::from_raw_parts(result.key, result.length) }.to_vec();
+    crate::helpers::free_bytes(result.key);
+    key
+}
+
+#[test]
+fn argon2_derive_aes_key_with_salt_test() {
+    type DeriveFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize) -> Argon2DerivedKey;
+    let password = b"DoNotUseThisPassword";
+    let other_password = b"DoNotUseThisPasswordEither";
+    let salt = argon2_generate_salt();
+    let salt_bytes = unsafe { std::slice::from_raw_parts(salt.salt, salt.length) }.to_vec();
+    let other_salt = [7u8; 16];
+    for (derive, key_length) in [
+        (argon2_derive_aes_128_key_with_salt as DeriveFn, 16),
+        (argon2_derive_aes_256_key_with_salt as DeriveFn, 32),
+    ] {
+        let key = derived_key_bytes(derive(password.as_ptr(), password.len(), salt_bytes.as_ptr(), salt_bytes.len()));
+        let same_salt = derived_key_bytes(derive(password.as_ptr(), password.len(), salt_bytes.as_ptr(), salt_bytes.len()));
+        let different_salt = derived_key_bytes(derive(password.as_ptr(), password.len(), other_salt.as_ptr(), other_salt.len()));
+        let different_password = derived_key_bytes(derive(other_password.as_ptr(), other_password.len(), salt_bytes.as_ptr(), salt_bytes.len()));
+        assert_eq!(key_length, key.len());
+        assert_eq!(key, same_salt);
+        assert_ne!(key, different_salt);
+        assert_ne!(key, different_password);
+    }
+    crate::helpers::free_bytes(salt.salt);
+}
+
+#[test]
+fn argon2_derive_aes_key_with_salt_bad_input_test() {
+    type DeriveFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize) -> Argon2DerivedKey;
+    let invalid_input = cas_error_code(&CasError::InvalidInput);
+    let invalid_parameters = cas_error_code(&CasError::InvalidParameters);
+    let password = b"DoNotUseThisPassword";
+    let salt = [1u8; 16];
+    let short_salt = [1u8; 15];
+    for derive in [argon2_derive_aes_128_key_with_salt as DeriveFn, argon2_derive_aes_256_key_with_salt as DeriveFn] {
+        for (result, expected) in [
+            (derive(password.as_ptr(), password.len(), short_salt.as_ptr(), short_salt.len()), invalid_parameters),
+            (derive(password.as_ptr(), password.len(), std::ptr::null(), 0), invalid_parameters),
+            (derive(password.as_ptr(), password.len(), std::ptr::null(), 16), invalid_input),
+            (derive(std::ptr::null(), 8, salt.as_ptr(), salt.len()), invalid_input),
+        ] {
+            assert!(result.key.is_null());
+            assert_eq!(0, result.length);
+            assert_eq!(expected, result.error_code);
+        }
+        // An empty password is valid Argon2 input.
+        assert!(!derived_key_bytes(derive(std::ptr::null(), 0, salt.as_ptr(), salt.len())).is_empty());
     }
 }

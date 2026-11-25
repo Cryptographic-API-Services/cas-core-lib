@@ -199,9 +199,18 @@ fn free_bytes_releases_ffi_results_test() {
     let password = CString::new("DoNotUseThisPassword").unwrap();
     let hash = crate::password_hashers::argon2::argon2_hash_password_parameters(19, 2, 1, password.as_ptr());
     assert_eq!(hash.error_code, 0);
-    let kdf = crate::password_hashers::argon2::argon2_derive_aes_256_key(hash.value);
+    free_cstring(hash.value);
+
+    let salt = crate::password_hashers::argon2::argon2_generate_salt();
+    assert_eq!(salt.length, 16);
+    let kdf = crate::password_hashers::argon2::argon2_derive_aes_256_key_with_salt(
+        password.as_ptr() as *const c_uchar,
+        password.as_bytes().len(),
+        salt.salt,
+        salt.length,
+    );
     assert_eq!(kdf.error_code, 0);
     assert_eq!(kdf.length, 32);
     free_bytes(kdf.key);
-    free_cstring(hash.value);
+    free_bytes(salt.salt);
 }
