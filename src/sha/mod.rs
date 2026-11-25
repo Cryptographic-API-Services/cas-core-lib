@@ -9,8 +9,9 @@ mod types;
 // Algorithms exposed here:
 // - `sha2_256_bytes` / `sha2_512_bytes` (+ `_verify`): SHA-2 (FIPS 180-4) via cas-lib `CASSHA2`.
 // - `sha3_256_bytes` / `sha3_512_bytes` (+ `_verify`): SHA-3 (FIPS 202) via cas-lib `CASSHA`.
-// - `sha256_bytes` / `sha512_bytes` (+ `_verify`): legacy names, kept for existing SDK
-//   callers. They have always been SHA-3 (cas-lib `CASSHA`) and still are.
+// - `sha256_bytes` / `sha512_bytes` (+ `_verify`): deprecated legacy names, kept for
+//   existing SDK callers. They have always been SHA-3 (cas-lib `CASSHA`) and still are;
+//   they are thin aliases of the `sha3_*` functions.
 //
 // Every function accepts empty input: a zero-length buffer hashes as the empty message,
 // and a null pointer is allowed when its length is 0.
@@ -133,12 +134,22 @@ pub extern "C" fn sha3_512_bytes_verify(
 }
 
 // ---- Legacy names (SHA-3) ----
+//
+// These four symbols predate the explicit `sha2_*` / `sha3_*` names. Despite the
+// names they have always computed SHA-3, and existing callers (cas-dotnet-sdk's
+// `SHAWrapper`) store and compare SHA-3 digests through them, so they stay SHA-3
+// aliases rather than silently switching to SHA-2. Do not add new callers: use
+// `sha3_*` for the same output, or `sha2_*` for real SHA-256 / SHA-512.
 
+/// Deprecated alias of [`sha3_512_bytes`]: computes SHA3-512, not SHA-512.
+#[deprecated(note = "computes SHA3-512; call sha3_512_bytes (or sha2_512_bytes for SHA-512)")]
 #[no_mangle]
 pub extern "C" fn sha512_bytes(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
-    hash_512::<CASSHA>(data_to_hash, data_len)
+    sha3_512_bytes(data_to_hash, data_len)
 }
 
+/// Deprecated alias of [`sha3_512_bytes_verify`]: verifies a SHA3-512 digest, not SHA-512.
+#[deprecated(note = "verifies SHA3-512; call sha3_512_bytes_verify (or sha2_512_bytes_verify for SHA-512)")]
 #[no_mangle]
 pub extern "C" fn sha512_bytes_verify(
     data_to_hash: *const c_uchar,
@@ -146,14 +157,18 @@ pub extern "C" fn sha512_bytes_verify(
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
 ) -> bool {
-    verify_512::<CASSHA>(data_to_hash, data_len, data_to_verify, data_to_verify_len)
+    sha3_512_bytes_verify(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
+/// Deprecated alias of [`sha3_256_bytes`]: computes SHA3-256, not SHA-256.
+#[deprecated(note = "computes SHA3-256; call sha3_256_bytes (or sha2_256_bytes for SHA-256)")]
 #[no_mangle]
 pub extern "C" fn sha256_bytes(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
-    hash_256::<CASSHA>(data_to_hash, data_len)
+    sha3_256_bytes(data_to_hash, data_len)
 }
 
+/// Deprecated alias of [`sha3_256_bytes_verify`]: verifies a SHA3-256 digest, not SHA-256.
+#[deprecated(note = "verifies SHA3-256; call sha3_256_bytes_verify (or sha2_256_bytes_verify for SHA-256)")]
 #[no_mangle]
 pub extern "C" fn sha256_bytes_verify(
     data_to_hash: *const c_uchar,
@@ -161,11 +176,13 @@ pub extern "C" fn sha256_bytes_verify(
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
 ) -> bool {
-    verify_256::<CASSHA>(data_to_hash, data_len, data_to_verify, data_to_verify_len)
+    sha3_256_bytes_verify(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
-// Known-answer tests: FIPS 180-4 (SHA-2) and FIPS 202 (SHA-3) digests of "" and "abc".
+// Known-answer tests: FIPS 180-4 (SHA-2) and FIPS 202 (SHA-3) digests of "", "abc" and
+// the 448-bit two-block message "abcdbcdecdef...nopq" (NIST CSRC example values).
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
@@ -181,6 +198,12 @@ mod tests {
     const SHA3_512_EMPTY: &str = "a69f73cca23a9ac5c8b567dc185a756e97c982164fe25859e0d1dcc1475c80a615b2123af1f5f94c11e3e9402c3ac558f500199d95b6d3e301758586281dcd26";
     const SHA3_512_ABC: &str = "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0";
 
+    const MSG_448: &[u8] = b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+    const SHA2_256_448: &str = "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1";
+    const SHA2_512_448: &str = "204a8fc6dda82f0a0ced7beb8e08a41657c16ef468b228a8279be331a703c33596fd15c13b1b07f9aa1d3bea57789ca031ad85c7a71dd70354ec631238ca3445";
+    const SHA3_256_448: &str = "41c0dba2a9d6240849100376a8235e2c82e1b9998a999e21db32dd97496d3376";
+    const SHA3_512_448: &str = "04a371e84ecfb5b8b77cb48610fca8182dd457ce6f326a0fd3d7ec2f1e91636dee691fbe0c985302ba1b0d8dc78c086346b533b49c030d99a27daf1139d6e75e";
+
     fn to_hex(result: &SHAHashByteResult) -> String {
         let bytes = unsafe { std::slice::from_raw_parts(result.result_bytes_ptr, result.length) };
         bytes.iter().map(|b| format!("{:02x}", b)).collect()
@@ -193,19 +216,22 @@ mod tests {
             .collect()
     }
 
-    /// Checks one algorithm against its "abc" and "" vectors, including a null
-    /// pointer with length 0, for both hash and verify.
-    fn check(hash: HashFn, verify: VerifyFn, empty_hex: &str, abc_hex: &str) {
+    /// Checks one algorithm against its "", "abc" and 448-bit vectors, including a
+    /// null pointer with length 0, for both hash and verify.
+    fn check(hash: HashFn, verify: VerifyFn, empty_hex: &str, abc_hex: &str, msg_448_hex: &str) {
         let abc = b"abc";
         let empty: &[u8] = &[];
 
         assert_eq!(to_hex(&hash(abc.as_ptr(), abc.len())), abc_hex);
+        assert_eq!(to_hex(&hash(MSG_448.as_ptr(), MSG_448.len())), msg_448_hex);
         assert_eq!(to_hex(&hash(empty.as_ptr(), 0)), empty_hex);
         assert_eq!(to_hex(&hash(std::ptr::null(), 0)), empty_hex);
 
         let empty_digest = from_hex(empty_hex);
         let abc_digest = from_hex(abc_hex);
+        let msg_448_digest = from_hex(msg_448_hex);
         assert!(verify(abc.as_ptr(), abc.len(), abc_digest.as_ptr(), abc_digest.len()));
+        assert!(verify(MSG_448.as_ptr(), MSG_448.len(), msg_448_digest.as_ptr(), msg_448_digest.len()));
         assert!(verify(std::ptr::null(), 0, empty_digest.as_ptr(), empty_digest.len()));
         assert!(!verify(std::ptr::null(), 0, abc_digest.as_ptr(), abc_digest.len()));
         assert!(!verify(abc.as_ptr(), abc.len(), empty_digest.as_ptr(), empty_digest.len()));
@@ -213,31 +239,44 @@ mod tests {
 
     #[test]
     fn sha2_256_test() {
-        check(sha2_256_bytes, sha2_256_bytes_verify, SHA2_256_EMPTY, SHA2_256_ABC);
+        check(sha2_256_bytes, sha2_256_bytes_verify, SHA2_256_EMPTY, SHA2_256_ABC, SHA2_256_448);
     }
 
     #[test]
     fn sha2_512_test() {
-        check(sha2_512_bytes, sha2_512_bytes_verify, SHA2_512_EMPTY, SHA2_512_ABC);
+        check(sha2_512_bytes, sha2_512_bytes_verify, SHA2_512_EMPTY, SHA2_512_ABC, SHA2_512_448);
     }
 
     #[test]
     fn sha3_256_test() {
-        check(sha3_256_bytes, sha3_256_bytes_verify, SHA3_256_EMPTY, SHA3_256_ABC);
+        check(sha3_256_bytes, sha3_256_bytes_verify, SHA3_256_EMPTY, SHA3_256_ABC, SHA3_256_448);
     }
 
     #[test]
     fn sha3_512_test() {
-        check(sha3_512_bytes, sha3_512_bytes_verify, SHA3_512_EMPTY, SHA3_512_ABC);
+        check(sha3_512_bytes, sha3_512_bytes_verify, SHA3_512_EMPTY, SHA3_512_ABC, SHA3_512_448);
     }
 
+    // The legacy names must keep producing SHA-3: SDK callers have stored digests
+    // made with them. These also pin that they are *not* SHA-2.
     #[test]
     fn legacy_sha256_is_sha3_test() {
-        check(sha256_bytes, sha256_bytes_verify, SHA3_256_EMPTY, SHA3_256_ABC);
+        check(sha256_bytes, sha256_bytes_verify, SHA3_256_EMPTY, SHA3_256_ABC, SHA3_256_448);
     }
 
     #[test]
     fn legacy_sha512_is_sha3_test() {
-        check(sha512_bytes, sha512_bytes_verify, SHA3_512_EMPTY, SHA3_512_ABC);
+        check(sha512_bytes, sha512_bytes_verify, SHA3_512_EMPTY, SHA3_512_ABC, SHA3_512_448);
+    }
+
+    #[test]
+    fn legacy_names_are_not_sha2_test() {
+        let abc = b"abc";
+        assert_ne!(to_hex(&sha256_bytes(abc.as_ptr(), abc.len())), SHA2_256_ABC);
+        assert_ne!(to_hex(&sha512_bytes(abc.as_ptr(), abc.len())), SHA2_512_ABC);
+        let sha2_256 = from_hex(SHA2_256_ABC);
+        let sha2_512 = from_hex(SHA2_512_ABC);
+        assert!(!sha256_bytes_verify(abc.as_ptr(), abc.len(), sha2_256.as_ptr(), sha2_256.len()));
+        assert!(!sha512_bytes_verify(abc.as_ptr(), abc.len(), sha2_512.as_ptr(), sha2_512.len()));
     }
 }
