@@ -3,6 +3,7 @@ use zeroizing_alloc::ZeroAlloc;
 #[global_allocator]
 static ALLOC: ZeroAlloc<std::alloc::System> = ZeroAlloc(std::alloc::System);
 pub mod aes;
+pub mod aes_gcm_siv;
 pub mod blake2;
 pub mod ed25519;
 pub mod helpers;
@@ -11,8 +12,11 @@ pub mod rsa;
 pub mod sha;
 pub mod x25519;
 pub mod ascon_aead;
+pub mod chacha20_poly1305;
 pub mod zstd;
 pub mod hpke;
+#[cfg(test)]
+mod free_tests;
 pub mod pqc {
     pub mod slh_dsa;
     pub mod ml_dsa;

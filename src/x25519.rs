@@ -1,8 +1,13 @@
 use cas_lib::key_exchange::{cas_key_exchange::CASKeyExchange, x25519::X25519};
 use std::ffi::c_uchar;
 
-use crate::helpers::cas_error_code;
+use crate::helpers::{cas_error_code, export_bytes, free_bytes_field};
 
+/// X25519 key pair from `generate_secret_and_public_key`.
+///
+/// The caller owns both buffers and must free them: pass the struct to
+/// [`free_x25519_secret_public_key_result`], or call `free_bytes` once on each
+/// pointer. `secret_key` is secret.
 #[repr(C)]
 pub struct x25519SecretPublicKeyResult {
     pub secret_key: *mut c_uchar,
@@ -11,6 +16,10 @@ pub struct x25519SecretPublicKeyResult {
     pub public_key_length: usize,
 }
 
+/// X25519 shared secret from `diffie_hellman`.
+///
+/// The caller owns `shared_secret` (secret) and frees it with `free_bytes`. It
+/// is null when `error_code` is non-zero.
 #[repr(C)]
 pub struct x25519SharedSecretResult {
     pub shared_secret: *mut c_uchar,
@@ -21,20 +30,14 @@ pub struct x25519SharedSecretResult {
 #[no_mangle]
 pub extern "C" fn generate_secret_and_public_key() -> x25519SecretPublicKeyResult {
     let result = <X25519 as CASKeyExchange>::generate_secret_and_public_key();
-    let mut secret_key = result.secret_key;
-    let mut public_key = result.public_key;
-    let secret_key_capacity = secret_key.capacity();
-    secret_key.reserve_exact(secret_key_capacity);
-    let public_key_capacity = public_key.capacity();
-    public_key.reserve_exact(public_key_capacity);
+    let secret_key = result.secret_key;
+    let public_key = result.public_key;
     let result = x25519SecretPublicKeyResult {
-        secret_key: secret_key.as_mut_ptr(),
+        secret_key: export_bytes(&secret_key),
         secret_key_length: secret_key.len(),
-        public_key: public_key.as_mut_ptr(),
+        public_key: export_bytes(&public_key),
         public_key_length: public_key.len(),
     };
-    std::mem::forget(public_key);
-    std::mem::forget(secret_key);
     result
 }
 
@@ -88,15 +91,12 @@ pub extern "C" fn diffie_hellman(
         unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) }
             .to_vec();
     match <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key) {
-        Ok(mut result) => {
-            let capacity = result.capacity();
-            result.reserve_exact(capacity);
+        Ok(result) => {
             let return_result = x25519SharedSecretResult {
-                shared_secret: result.as_mut_ptr(),
+                shared_secret: export_bytes(&result),
                 shared_secret_length: result.len(),
                 error_code: 0,
             };
-            std::mem::forget(result);
             return_result
         }
         Err(e) => x25519SharedSecretResult {
@@ -104,5 +104,57 @@ pub extern "C" fn diffie_hellman(
             shared_secret_length: 0,
             error_code: cas_error_code(&e),
         },
+    }
+}
+
+/// Frees both buffers of an [`x25519SecretPublicKeyResult`] and nulls its
+/// fields, so a second call is harmless. A null `result` is ignored.
+#[no_mangle]
+pub extern "C" fn free_x25519_secret_public_key_result(result: *mut x25519SecretPublicKeyResult) {
+    let Some(result) = (unsafe { result.as_mut() }) else { return };
+    free_bytes_field(&mut result.secret_key, &mut result.secret_key_length);
+    free_bytes_field(&mut result.public_key, &mut result.public_key_length);
+}
+
+#[test]
+fn free_x25519_results_test() {
+    let mut alice = generate_secret_and_public_key();
+    let mut bob = generate_secret_and_public_key();
+    let shared_secret = diffie_hellman(
+        alice.secret_key,
+        alice.secret_key_length,
+        bob.public_key,
+        bob.public_key_length,
+    );
+    assert_eq!(0, shared_secret.error_code);
+    crate::helpers::free_bytes(shared_secret.shared_secret);
+
+    free_x25519_secret_public_key_result(&mut alice);
+    assert!(alice.secret_key.is_null() && alice.public_key.is_null());
+    assert_eq!(0, alice.secret_key_length + alice.public_key_length);
+    free_x25519_secret_public_key_result(&mut alice);
+    free_x25519_secret_public_key_result(&mut bob);
+    free_x25519_secret_public_key_result(std::ptr::null_mut());
+}
+
+#[test]
+pub fn diffie_hellman_rejects_low_order_public_keys_test() {
+    let invalid_key = cas_error_code(&cas_lib::error::CasError::InvalidKey);
+    let keys = generate_secret_and_public_key();
+    // Low-order points from RFC 7748 / Wycheproof: each forces an all-zero
+    // shared secret, so the exchange is refused (#98).
+    let mut low_order_public_keys: Vec<[u8; 32]> = vec![[0u8; 32]];
+    let mut one = [0u8; 32];
+    one[0] = 1;
+    low_order_public_keys.push(one);
+    low_order_public_keys.push([
+        0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4, 0x6a,
+        0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00,
+    ]);
+    for public_key in low_order_public_keys {
+        let result = diffie_hellman(keys.secret_key, keys.secret_key_length, public_key.as_ptr(), public_key.len());
+        assert!(result.shared_secret.is_null());
+        assert_eq!(0, result.shared_secret_length);
+        assert_eq!(invalid_key, result.error_code);
     }
 }
