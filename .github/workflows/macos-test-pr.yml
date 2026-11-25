@@ -1,9 +1,12 @@
 name: macOS PR Tests
 
 # Runs on every PR, whatever the base branch, so PRs into epic/** integration
-# branches get CI too (#109).
+# branches get CI too (#109), and again on every merge into main or an epic/**
+# branch, so the merged result is tested and not only the PR head.
 on:
   pull_request:
+  push:
+    branches: [ "main", "epic/**" ]
   workflow_dispatch:
 
 concurrency:
