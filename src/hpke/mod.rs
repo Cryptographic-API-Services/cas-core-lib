@@ -24,6 +24,9 @@ pub extern "C" fn hpke_generate_keypair() -> HpkeKeyPair {
     return_result
 }
 
+/// HPKE (X25519, HKDF-SHA512, AES-256-GCM) base-mode encryption. `info_str`
+/// binds the keys to a context and must be at most 65,530 bytes: a longer one
+/// returns `InvalidInput` (4). The recipient must pass the same `info_str` and AAD.
 #[no_mangle]
 pub extern "C" fn hpke_encrypt(
     plaintext: *const c_uchar,
@@ -65,6 +68,9 @@ pub extern "C" fn hpke_encrypt(
     }
 }
 
+/// Decrypts a message from [`hpke_encrypt`]. An `info_str` longer than 65,530
+/// bytes returns `InvalidInput` (4); a wrong `info_str`, AAD, key or tag returns
+/// `DecryptionFailed` (8).
 #[no_mangle]
 pub extern "C" fn hpke_decrypt(
     ciphertext: *const c_uchar,
@@ -194,4 +200,67 @@ fn hpke_encrypt_null_aad_with_length_is_invalid_input_test() {
     );
     assert!(encrypted.ciphertext_ptr.is_null());
     assert_eq!(cas_error_code(&CasError::InvalidInput), encrypted.error_code);
+}
+
+// cas-lib 0.7.0 refuses an `info` longer than 65,530 bytes (`hpke` would panic on it).
+#[cfg(test)]
+const MAX_INFO_LENGTH: usize = 65_530;
+
+#[test]
+fn hpke_info_length_limit_test() {
+    let invalid_input = cas_error_code(&CasError::InvalidInput);
+    let key_pair = hpke_generate_keypair();
+    let private_key = take_bytes(key_pair.private_key_ptr, key_pair.private_key_ptr_length);
+    let public_key = take_bytes(key_pair.public_key_ptr, key_pair.public_key_ptr_length);
+    let plaintext = b"HPKE message".to_vec();
+    let encrypt = |info_str: &[u8]| {
+        hpke_encrypt(
+            plaintext.as_ptr(),
+            plaintext.len(),
+            public_key.as_ptr(),
+            public_key.len(),
+            info_str.as_ptr(),
+            info_str.len(),
+            std::ptr::null(),
+            0,
+        )
+    };
+
+    // The longest accepted info round-trips.
+    let longest_info = vec![b'i'; MAX_INFO_LENGTH];
+    let encrypted = encrypt(&longest_info);
+    assert_eq!(0, encrypted.error_code);
+    let encapped_key = take_bytes(encrypted.encapped_key_ptr, encrypted.encapped_key_ptr_length);
+    let ciphertext = take_bytes(encrypted.ciphertext_ptr, encrypted.ciphertext_ptr_length);
+    let tag = take_bytes(encrypted.tag_ptr, encrypted.tag_ptr_length);
+    let decrypt = |info_str: &[u8]| {
+        hpke_decrypt(
+            ciphertext.as_ptr(),
+            ciphertext.len(),
+            private_key.as_ptr(),
+            private_key.len(),
+            encapped_key.as_ptr(),
+            encapped_key.len(),
+            tag.as_ptr(),
+            tag.len(),
+            info_str.as_ptr(),
+            info_str.len(),
+            std::ptr::null(),
+            0,
+        )
+    };
+    let decrypted = decrypt(&longest_info);
+    assert_eq!(0, decrypted.error_code);
+    assert_eq!(plaintext, take_bytes(decrypted.plaintext_ptr, decrypted.plaintext_ptr_length));
+
+    // One byte more is InvalidInput on both sides instead of a panic.
+    let too_long_info = vec![b'i'; MAX_INFO_LENGTH + 1];
+    let encrypted = encrypt(&too_long_info);
+    assert!(encrypted.encapped_key_ptr.is_null());
+    assert!(encrypted.ciphertext_ptr.is_null());
+    assert!(encrypted.tag_ptr.is_null());
+    assert_eq!(invalid_input, encrypted.error_code);
+    let decrypted = decrypt(&too_long_info);
+    assert!(decrypted.plaintext_ptr.is_null());
+    assert_eq!(invalid_input, decrypted.error_code);
 }
