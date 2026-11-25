@@ -45,6 +45,7 @@ pub fn cas_error_code(error: &CasError) -> i32 {
         CasError::KeyGenerationFailed => 10,
         CasError::PasswordHashingFailed => 11,
         CasError::CompressionFailed => 12,
+        CasError::DecompressionLimitExceeded => 13,
     }
 }
 
