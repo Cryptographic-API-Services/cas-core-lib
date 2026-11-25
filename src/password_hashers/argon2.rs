@@ -25,38 +25,38 @@ fn input_bytes(ptr: *const c_uchar, len: usize) -> CasResult<Vec<u8>> {
 /// Hashes a password with Argon2id. `memory_cost` is in **MiB** (19–4096),
 /// `iterations` 1–10 and `parallelism` 1–16. Out-of-range values return
 /// `InvalidParameters` (6) instead of allocating. The password is
-/// `password_length` bytes of UTF-8 and may contain NUL bytes.
+/// `password_bytes` (`password_length` bytes of UTF-8) and may contain NUL bytes.
 #[no_mangle]
 pub extern "C" fn argon2_hash_password_parameters_bytes(
     memory_cost: u32,
     iterations: u32,
     parallelism: u32,
-    password: *const c_uchar,
+    password_bytes: *const c_uchar,
     password_length: usize,
 ) -> CasStringResult {
-    string_result(utf8_from_ffi(password, password_length).and_then(|password| {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(|password| {
         CASArgon::hash_password_parameters(memory_cost, iterations, parallelism, password)
     }))
 }
 
 /// Hashes a password with Argon2id's default parameters. The password is
-/// `password_length` bytes of UTF-8 and may contain NUL bytes.
+/// `password_bytes` (`password_length` bytes of UTF-8) and may contain NUL bytes.
 #[no_mangle]
-pub extern "C" fn argon2_hash_bytes(password: *const c_uchar, password_length: usize) -> CasStringResult {
-    string_result(utf8_from_ffi(password, password_length).and_then(CASArgon::hash_password))
+pub extern "C" fn argon2_hash_bytes(password_bytes: *const c_uchar, password_length: usize) -> CasStringResult {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(CASArgon::hash_password))
 }
 
 /// Verifies a password against an Argon2 hash (a NUL-terminated string). The
-/// password is `password_length` bytes of UTF-8.
+/// password is `password_bytes` (`password_length` bytes of UTF-8).
 #[no_mangle]
 pub extern "C" fn argon2_verify_bytes(
     hashed_password: *const c_char,
-    password: *const c_uchar,
+    password_bytes: *const c_uchar,
     password_length: usize,
 ) -> CasVerifyResult {
     verify_result(
         string_from_c_str(hashed_password)
-            .and_then(|hash| Ok((hash, utf8_from_ffi(password, password_length)?)))
+            .and_then(|hash| Ok((hash, utf8_from_ffi(password_bytes, password_length)?)))
             .and_then(|(hash, password)| CASArgon::verify_password(hash, password)),
     )
 }

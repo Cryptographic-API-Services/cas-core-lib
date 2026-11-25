@@ -10,24 +10,24 @@ use std::ffi::{c_char, c_uchar, CString};
 
 /// Hashes a password with bcrypt. `cost` must be 10–16; out-of-range values
 /// return `InvalidParameters` (6). The password is `password_length` bytes of
-/// UTF-8 (at most 72) and may contain NUL bytes.
+/// UTF-8 (at most 72) and may contain NUL bytes. The bytes are `password_bytes`.
 #[no_mangle]
-pub extern "C" fn bcrypt_hash_with_parameters_bytes(password: *const c_uchar, password_length: usize, cost: u32) -> CasStringResult {
-    string_result(utf8_from_ffi(password, password_length).and_then(|password| CASBCrypt::hash_password_customized(password, cost)))
+pub extern "C" fn bcrypt_hash_with_parameters_bytes(password_bytes: *const c_uchar, password_length: usize, cost: u32) -> CasStringResult {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(|password| CASBCrypt::hash_password_customized(password, cost)))
 }
 
 /// Hashes a password with bcrypt at the default cost (12). The password is
-/// `password_length` bytes of UTF-8 (at most 72) and may contain NUL bytes.
+/// `password_bytes` (`password_length` bytes of UTF-8, at most 72) and may contain NUL bytes.
 #[no_mangle]
-pub extern "C" fn bcrypt_hash_bytes(password: *const c_uchar, password_length: usize) -> CasStringResult {
-    string_result(utf8_from_ffi(password, password_length).and_then(CASBCrypt::hash_password))
+pub extern "C" fn bcrypt_hash_bytes(password_bytes: *const c_uchar, password_length: usize) -> CasStringResult {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(CASBCrypt::hash_password))
 }
 
 /// Verifies a password against a bcrypt hash (a NUL-terminated string). The
-/// password is `password_length` bytes of UTF-8 (at most 72).
+/// password is `password_bytes` (`password_length` bytes of UTF-8, at most 72).
 #[no_mangle]
-pub extern "C" fn bcrypt_verify_bytes(password: *const c_uchar, password_length: usize, hash: *const c_char) -> CasVerifyResult {
-    verify_result(utf8_from_ffi(password, password_length).and_then(|password| Ok((password, string_from_c_str(hash)?))).and_then(|(password, hash)| CASBCrypt::verify_password(hash, password)))
+pub extern "C" fn bcrypt_verify_bytes(password_bytes: *const c_uchar, password_length: usize, hash: *const c_char) -> CasVerifyResult {
+    verify_result(utf8_from_ffi(password_bytes, password_length).and_then(|password| Ok((password, string_from_c_str(hash)?))).and_then(|(password, hash)| CASBCrypt::verify_password(hash, password)))
 }
 
 /// Deprecated: the password is a C string, so it ends at the first NUL byte.

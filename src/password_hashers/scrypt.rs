@@ -10,38 +10,38 @@ use crate::helpers::{cas_error_code, string_from_c_str, string_result, utf8_from
 /// Hashes a password with scrypt. `cpu_memory_cost` is log₂N (10–20),
 /// `block_size` (`r`) 1–32 and `parallelism` (`p`) 1–16; scrypt also needs
 /// log₂N < 16·r. Out-of-range values return `InvalidParameters` (6). The
-/// password is `password_length` bytes of UTF-8 and may contain NUL bytes.
+/// password is `password_bytes` (`password_length` bytes of UTF-8) and may contain NUL bytes.
 #[no_mangle]
 pub extern "C" fn scrypt_hash_with_parameters_bytes(
-    password: *const c_uchar,
+    password_bytes: *const c_uchar,
     password_length: usize,
     cpu_memory_cost: u8,
     block_size: u32,
     parallelism: u32,
 ) -> CasStringResult {
-    string_result(utf8_from_ffi(password, password_length).and_then(|password| {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(|password| {
         CASScrypt::hash_password_customized(password, cpu_memory_cost, block_size, parallelism)
     }))
 }
 
 /// Hashes a password with scrypt's default parameters. The password is
-/// `password_length` bytes of UTF-8 and may contain NUL bytes.
+/// `password_bytes` (`password_length` bytes of UTF-8) and may contain NUL bytes.
 #[no_mangle]
-pub extern "C" fn scrypt_hash_bytes(password: *const c_uchar, password_length: usize) -> CasStringResult {
-    string_result(utf8_from_ffi(password, password_length).and_then(CASScrypt::hash_password))
+pub extern "C" fn scrypt_hash_bytes(password_bytes: *const c_uchar, password_length: usize) -> CasStringResult {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(CASScrypt::hash_password))
 }
 
 /// Verifies a password against a scrypt hash (a NUL-terminated string). The
-/// password is `password_length` bytes of UTF-8.
+/// password is `password_bytes` (`password_length` bytes of UTF-8).
 #[no_mangle]
 pub extern "C" fn scrypt_verify_bytes(
     hash_to_check: *const c_char,
-    password: *const c_uchar,
+    password_bytes: *const c_uchar,
     password_length: usize,
 ) -> CasVerifyResult {
     verify_result(
         string_from_c_str(hash_to_check)
-            .and_then(|hash| Ok((hash, utf8_from_ffi(password, password_length)?)))
+            .and_then(|hash| Ok((hash, utf8_from_ffi(password_bytes, password_length)?)))
             .and_then(|(hash, password)| CASScrypt::verify_password(hash, password)),
     )
 }
