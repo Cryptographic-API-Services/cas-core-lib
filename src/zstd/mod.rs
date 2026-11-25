@@ -2,7 +2,7 @@ use cas_lib::compression::zstd;
 use cas_lib::error::{CasError, CasResult};
 use libc::c_uchar;
 
-use crate::helpers::{cas_error_code, export_bytes};
+use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes};
 
 /// Highest zstd compression level. Callers pass `level` as a `usize`, so the
 /// accepted range is `0..=MAX_COMPRESSION_LEVEL` (0 selects zstd's default).
@@ -47,8 +47,7 @@ fn to_ffi_result(result: CasResult<Vec<u8>>) -> ZstdCompressResult {
 /// [`decompress_with_limit`] to choose a different cap.
 #[no_mangle]
 pub extern "C" fn decompress(data_to_decompress: *const c_uchar, data_to_decompress_length: usize) -> ZstdCompressResult {
-    let data_to_decompress = unsafe { std::slice::from_raw_parts(data_to_decompress, data_to_decompress_length) }.to_vec();
-    to_ffi_result(zstd::decompress(data_to_decompress))
+    to_ffi_result(bytes_from_ffi(data_to_decompress, data_to_decompress_length).and_then(zstd::decompress))
 }
 
 /// Decompresses zstd data, producing at most `max_output_length` bytes.
@@ -65,8 +64,7 @@ pub extern "C" fn decompress_with_limit(
     if max_output_length == 0 {
         return to_ffi_result(Err(CasError::InvalidParameters));
     }
-    let data_to_decompress = unsafe { std::slice::from_raw_parts(data_to_decompress, data_to_decompress_length) }.to_vec();
-    to_ffi_result(zstd::decompress_with_limit(data_to_decompress, max_output_length))
+    to_ffi_result(bytes_from_ffi(data_to_decompress, data_to_decompress_length).and_then(|data| zstd::decompress_with_limit(data, max_output_length)))
 }
 
 /// Compresses data with zstd. `level` must be in `0..=22` (0 selects zstd's
@@ -76,8 +74,7 @@ pub extern "C" fn compress(data_to_compress: *const c_uchar, data_to_compress_le
     if level > MAX_COMPRESSION_LEVEL {
         return to_ffi_result(Err(CasError::InvalidParameters));
     }
-    let data_to_compress = unsafe { std::slice::from_raw_parts(data_to_compress, data_to_compress_length) }.to_vec();
-    to_ffi_result(zstd::compress(data_to_compress, level as i32))
+    to_ffi_result(bytes_from_ffi(data_to_compress, data_to_compress_length).and_then(|data| zstd::compress(data, level as i32)))
 }
 
 #[cfg(test)]

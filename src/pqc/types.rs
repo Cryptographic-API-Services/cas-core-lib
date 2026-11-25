@@ -11,6 +11,8 @@ pub struct SlhDsaKeyPairResult {
     pub signing_key_length: usize,
     pub verification_key_ptr: *mut u8,
     pub verification_key_length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 /// SLH-DSA signature from `slh_dsa_sign_message`.
@@ -35,6 +37,8 @@ pub struct MlDsaKeyPairResult {
     pub signing_key_length: usize,
     pub verification_key_ptr: *mut u8,
     pub verification_key_length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 /// ML-DSA signature from `ml_dsa_sign_message`.
@@ -59,6 +63,8 @@ pub struct MlKemKeyPairResult {
     pub secret_key_length: usize,
     pub public_key_ptr: *mut u8,
     pub public_key_length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 /// ML-KEM-1024 encapsulation from `ml_kem_1024_encapsulate_shared_secret`.

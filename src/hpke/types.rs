@@ -14,7 +14,10 @@ pub struct HpkeKeyPair {
     pub public_key_ptr: *mut c_uchar,
     pub public_key_ptr_length: usize,
     pub info_str_ptr: *mut c_uchar,
-    pub info_str_ptr_length: usize
+    pub info_str_ptr_length: usize,
+    /// `0` on success. Generation takes no caller input; a non-zero code means it
+    /// failed and every pointer is null.
+    pub error_code: i32,
 }
 
 /// HPKE ciphertext from `hpke_encrypt`.

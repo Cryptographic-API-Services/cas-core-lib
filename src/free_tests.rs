@@ -8,15 +8,6 @@ use crate::helpers::{free_bytes, free_cstring};
 use crate::{aes, ascon_aead, blake2, hmac, sha, x25519, zstd};
 use crate::password_hashers::{argon2, bcrypt, scrypt};
 
-/// Same layout as the `{ ptr, length }` results whose fields are private
-/// (`Ascon128Key`, `Ascon128Nonce`). `transmute` fails to compile if the sizes
-/// ever differ.
-#[repr(C)]
-struct BytesResult {
-    ptr: *mut c_uchar,
-    length: usize,
-}
-
 /// Same layout as the `{ ptr, length, error_code }` results whose fields are
 /// private (`Ascon128EncryptResult`, `Ascon128DecryptResult`, `ZstdCompressResult`).
 #[repr(C)]
@@ -73,8 +64,10 @@ fn free_aes_results_test() {
 #[test]
 fn free_ascon_results_test() {
     let plaintext = b"free every Ascon result".to_vec();
-    let key: BytesResult = unsafe { std::mem::transmute(ascon_aead::ascon_128_key()) };
-    let nonce: BytesResult = unsafe { std::mem::transmute(ascon_aead::ascon_128_nonce()) };
+    let key: BytesErrorResult = unsafe { std::mem::transmute(ascon_aead::ascon_128_key()) };
+    let nonce: BytesErrorResult = unsafe { std::mem::transmute(ascon_aead::ascon_128_nonce()) };
+    assert_eq!(0, key.error_code);
+    assert_eq!(0, nonce.error_code);
     let ciphertext: BytesErrorResult = unsafe {
         std::mem::transmute(ascon_aead::ascon_128_encrypt(nonce.ptr, nonce.length, key.ptr, key.length, plaintext.as_ptr(), plaintext.len()))
     };

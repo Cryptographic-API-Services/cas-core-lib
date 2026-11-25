@@ -13,13 +13,7 @@ use crate::helpers::{cas_error_code, export_bytes, string_from_c_str, string_res
 /// Rebuilds an input buffer from a pointer + length pair. A null pointer is
 /// accepted for a zero-length buffer and is `InvalidInput` otherwise.
 fn input_bytes(ptr: *const c_uchar, len: usize) -> CasResult<Vec<u8>> {
-    if len == 0 {
-        return Ok(Vec::new());
-    }
-    if ptr.is_null() {
-        return Err(CasError::InvalidInput);
-    }
-    Ok(unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec())
+    crate::helpers::bytes_from_ffi(ptr, len)
 }
 
 /// Hashes a password with Argon2id. `memory_cost` is in **MiB** (19–4096),
@@ -95,6 +89,7 @@ pub extern "C" fn argon2_generate_salt() -> Argon2Salt {
     Argon2Salt {
         salt: export_bytes(&salt),
         length: salt.len(),
+        error_code: 0,
     }
 }
 

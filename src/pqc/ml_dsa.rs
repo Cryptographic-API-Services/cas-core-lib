@@ -1,6 +1,6 @@
 use cas_lib::pqc::ml_dsa::{generate_signing_and_verification_key, sign_message, verify_signature};
 use crate::pqc::types::{MlDsaKeyPairResult, MlDsaSignature};
-use crate::helpers::{cas_error_code, export_bytes, CasVerifyResult};
+use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes, CasVerifyResult};
 
 #[no_mangle]
 pub extern "C" fn ml_dsa_generate_signing_and_verification_key() -> MlDsaKeyPairResult {
@@ -10,6 +10,7 @@ pub extern "C" fn ml_dsa_generate_signing_and_verification_key() -> MlDsaKeyPair
         signing_key_length: key_pair.signing_key.len(),
         verification_key_ptr: export_bytes(&key_pair.verification_key),
         verification_key_length: key_pair.verification_key.len(),
+        error_code: 0,
     };
     result
 }
@@ -21,17 +22,11 @@ pub extern "C" fn ml_dsa_sign_message(
     message: *const u8,
     message_length: usize,
 ) -> MlDsaSignature {
-    let signing_key_slice = unsafe {
-        assert!(!signing_key.is_null());
-        std::slice::from_raw_parts(signing_key, signing_key_length)
-    }
-    .to_vec();
-    let message_slice = unsafe {
-        assert!(!message.is_null());
-        std::slice::from_raw_parts(message, message_length)
-    }
-    .to_vec();
-    match sign_message(message_slice, signing_key_slice) {
+    match (|| {
+        let signing_key_slice = bytes_from_ffi(signing_key, signing_key_length)?;
+        let message_slice = bytes_from_ffi(message, message_length)?;
+        sign_message(message_slice, signing_key_slice)
+    })() {
         Ok(signature) => {
             let result = MlDsaSignature {
                 signature_ptr: export_bytes(&signature),
@@ -57,22 +52,12 @@ pub extern "C" fn ml_dsa_verify_signature(
     message: *const u8,
     message_length: usize,
 ) -> CasVerifyResult {
-    let verification_key_slice = unsafe {
-        assert!(!verification_key.is_null());
-        std::slice::from_raw_parts(verification_key, verification_key_length)
-    }
-    .to_vec();
-    let signature_slice = unsafe {
-        assert!(!signature.is_null());
-        std::slice::from_raw_parts(signature, signature_length)
-    }
-    .to_vec();
-    let message_slice = unsafe {
-        assert!(!message.is_null());
-        std::slice::from_raw_parts(message, message_length)
-    }
-    .to_vec();
-    match verify_signature(message_slice, signature_slice, verification_key_slice) {
+    match (|| {
+        let verification_key_slice = bytes_from_ffi(verification_key, verification_key_length)?;
+        let signature_slice = bytes_from_ffi(signature, signature_length)?;
+        let message_slice = bytes_from_ffi(message, message_length)?;
+        verify_signature(message_slice, signature_slice, verification_key_slice)
+    })() {
         Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
         Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
     }

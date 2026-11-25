@@ -1,7 +1,7 @@
 use cas_lib::signatures::ed25519::{ed25519_sign_with_key_pair,  ed25519_verify_with_key_pair,  ed25519_verify_with_public_key,  get_ed25519_key_pair};
 use libc::c_uchar;
 
-use crate::helpers::{cas_error_code, export_bytes, free_bytes_field, CasVerifyResult};
+use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes, free_bytes_field, CasVerifyResult};
 
 /// Ed25519 key pair from `get_ed25519_key_pair_bytes`.
 ///
@@ -14,6 +14,8 @@ pub struct Ed25519KeyPairBytesResult {
     signing_key_length: usize,
     verifying_key: *mut c_uchar,
     verifying_key_length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 /// Ed25519 signature and public key from `sign_with_key_pair_bytes`.
@@ -38,6 +40,7 @@ pub extern "C" fn get_ed25519_key_pair_bytes() -> Ed25519KeyPairBytesResult {
         signing_key: export_bytes(&keypair.key_pair),
         verifying_key_length: keypair.public_key.len(),
         verifying_key: export_bytes(&keypair.public_key),
+        error_code: 0,
     };
     result
 }
@@ -59,17 +62,11 @@ pub extern "C" fn sign_with_key_pair_bytes(
     message_to_sign: *const c_uchar,
     message_to_sign_length: usize,
 ) -> Ed25519ByteSignatureResult {
-    let key_pair_slice = unsafe {
-        assert!(!key_pair.is_null());
-        std::slice::from_raw_parts(key_pair, key_pair_length)
-    }
-    .to_vec();
-    let message_to_sign_slice = unsafe {
-        assert!(!message_to_sign.is_null());
-        std::slice::from_raw_parts(message_to_sign, message_to_sign_length)
-    }
-    .to_vec();
-    match ed25519_sign_with_key_pair(key_pair_slice, message_to_sign_slice) {
+    match (|| {
+        let key_pair_slice = bytes_from_ffi(key_pair, key_pair_length)?;
+        let message_to_sign_slice = bytes_from_ffi(message_to_sign, message_to_sign_length)?;
+        ed25519_sign_with_key_pair(key_pair_slice, message_to_sign_slice)
+    })() {
         Ok(result) => {
             let public_key = result.public_key;
             let signature = result.signature;
@@ -119,19 +116,12 @@ pub extern "C" fn verify_with_key_pair_bytes(
     message: *const c_uchar,
     message_length: usize,
 ) -> CasVerifyResult {
-    let key_pair_slice = unsafe {
-        assert!(!key_pair.is_null());
-        std::slice::from_raw_parts(key_pair, key_pair_length)
-    }.to_vec();
-    let signature_slice = unsafe {
-        assert!(!signature.is_null());
-        std::slice::from_raw_parts(signature, signature_length)
-    }.to_vec();
-    let message_slice = unsafe {
-        assert!(!message.is_null());
-        std::slice::from_raw_parts(message, message_length)
-    }.to_vec();
-    match ed25519_verify_with_key_pair(key_pair_slice, signature_slice, message_slice) {
+    match (|| {
+        let key_pair_slice = bytes_from_ffi(key_pair, key_pair_length)?;
+        let signature_slice = bytes_from_ffi(signature, signature_length)?;
+        let message_slice = bytes_from_ffi(message, message_length)?;
+        ed25519_verify_with_key_pair(key_pair_slice, signature_slice, message_slice)
+    })() {
         Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
         Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
     }
@@ -168,19 +158,12 @@ pub extern "C" fn verify_with_public_key_bytes(
     message: *const c_uchar,
     message_length: usize,
 ) -> CasVerifyResult {
-    let public_key_slice = unsafe {
-        assert!(!public_key.is_null());
-        std::slice::from_raw_parts(public_key, public_key_length)
-    }.to_vec();
-    let signature_slice = unsafe {
-        assert!(!signature.is_null());
-        std::slice::from_raw_parts(signature, signature_length)
-    }.to_vec();
-    let message_slice = unsafe {
-        assert!(!message.is_null());
-        std::slice::from_raw_parts(message, message_length)
-    }.to_vec();
-    match ed25519_verify_with_public_key(public_key_slice, signature_slice, message_slice) {
+    match (|| {
+        let public_key_slice = bytes_from_ffi(public_key, public_key_length)?;
+        let signature_slice = bytes_from_ffi(signature, signature_length)?;
+        let message_slice = bytes_from_ffi(message, message_length)?;
+        ed25519_verify_with_public_key(public_key_slice, signature_slice, message_slice)
+    })() {
         Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
         Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
     }

@@ -7,4 +7,7 @@ use std::ffi::c_uchar;
 pub struct SHAHashByteResult {
     pub result_bytes_ptr: *mut c_uchar,
     pub length: usize,
+    /// `0` on success. `InvalidInput` (4) when the pointer is null and the length
+    /// is not zero, or the length exceeds `isize::MAX`. A real digest is never empty.
+    pub error_code: i32,
 }

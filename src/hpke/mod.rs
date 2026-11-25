@@ -19,7 +19,8 @@ pub extern "C" fn hpke_generate_keypair() -> HpkeKeyPair {
         public_key_ptr: export_bytes(&public_key),
         public_key_ptr_length: public_key.len(),
         info_str_ptr: export_bytes(&info_str),
-        info_str_ptr_length: info_str.len()
+        info_str_ptr_length: info_str.len(),
+        error_code: 0,
     };
     return_result
 }
@@ -38,11 +39,13 @@ pub extern "C" fn hpke_encrypt(
     aad: *const c_uchar,
     aad_length: usize,
 ) -> HpkeEncrypt {
-    let plaintext = unsafe { std::slice::from_raw_parts(plaintext, plaintext_length) }.to_vec();
-    let public_key = unsafe { std::slice::from_raw_parts(public_key, public_keylength) }.to_vec();
-    let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
-    let result = bytes_from_ffi(aad, aad_length)
-        .and_then(|aad| <CASHPKE as CASHybrid>::encrypt(plaintext, public_key, info_str, aad));
+    let result = (|| {
+        let plaintext = bytes_from_ffi(plaintext, plaintext_length)?;
+        let public_key = bytes_from_ffi(public_key, public_keylength)?;
+        let info_str = bytes_from_ffi(info_str, info_str_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASHPKE as CASHybrid>::encrypt(plaintext, public_key, info_str, aad)
+    })();
     match result {
         Ok((encapped_key, ciphertext, tag)) => {
             let return_result = HpkeEncrypt {
@@ -86,13 +89,15 @@ pub extern "C" fn hpke_decrypt(
     aad: *const c_uchar,
     aad_length: usize,
 ) -> HpkeDecrypt {
-    let ciphertext = unsafe { std::slice::from_raw_parts(ciphertext, ciphertext_length) }.to_vec();
-    let private_key = unsafe { std::slice::from_raw_parts(private_key, private_keylength) }.to_vec();
-    let encapped_key = unsafe { std::slice::from_raw_parts(encapped_key, encapped_key_length) }.to_vec();
-    let tag = unsafe { std::slice::from_raw_parts(tag, tag_length)}.to_vec();
-    let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
-    let result = bytes_from_ffi(aad, aad_length)
-        .and_then(|aad| <CASHPKE as CASHybrid>::decrypt(ciphertext, private_key, encapped_key, tag, info_str, aad));
+    let result = (|| {
+        let ciphertext = bytes_from_ffi(ciphertext, ciphertext_length)?;
+        let private_key = bytes_from_ffi(private_key, private_keylength)?;
+        let encapped_key = bytes_from_ffi(encapped_key, encapped_key_length)?;
+        let tag = bytes_from_ffi(tag, tag_length)?;
+        let info_str = bytes_from_ffi(info_str, info_str_length)?;
+        let aad = bytes_from_ffi(aad, aad_length)?;
+        <CASHPKE as CASHybrid>::decrypt(ciphertext, private_key, encapped_key, tag, info_str, aad)
+    })();
     match result {
         Ok(plaintext) => {
             let return_result = HpkeDecrypt {

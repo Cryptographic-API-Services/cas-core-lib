@@ -1,4 +1,4 @@
-use std::ffi::{c_char, c_uchar, CStr, CString};
+use std::ffi::{c_char, c_uchar, CString};
 
 use cas_lib::asymmetric::types::CASRSAEncryption;
 use cas_lib::asymmetric::cas_rsa::CASRSA;
@@ -6,14 +6,20 @@ use cas_lib::error::CasResult;
 
 mod types;
 use self::types::{RsaKeyPair, RsaSignBytesResults};
-use crate::helpers::{cas_error_code, export_bytes, CasVerifyResult};
+use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes, string_from_c_str, CasVerifyResult};
 
 #[no_mangle]
 pub extern "C" fn get_key_pair(key_size: usize) -> RsaKeyPair {
     match <CASRSA as CASRSAEncryption>::generate_rsa_keys(key_size) {
         Ok(key_pair) => RsaKeyPair {
-            priv_key: CString::new(key_pair.private_key).unwrap().into_raw(),
-            pub_key: CString::new(key_pair.public_key).unwrap().into_raw(),
+            priv_key: match CString::new(key_pair.private_key) {
+                Ok(value) => value.into_raw(),
+                Err(_) => return RsaKeyPair { priv_key: std::ptr::null_mut(), pub_key: std::ptr::null_mut(), error_code: cas_error_code(&cas_lib::error::CasError::KeyGenerationFailed) },
+            },
+            pub_key: match CString::new(key_pair.public_key) {
+                Ok(value) => value.into_raw(),
+                Err(_) => return RsaKeyPair { priv_key: std::ptr::null_mut(), pub_key: std::ptr::null_mut(), error_code: cas_error_code(&cas_lib::error::CasError::KeyGenerationFailed) },
+            },
             error_code: 0,
         },
         Err(e) => RsaKeyPair {
@@ -80,19 +86,14 @@ fn rsa_sign(
     data_to_sign_length: usize,
     sign: fn(String, Vec<u8>) -> CasResult<Vec<u8>>,
 ) -> RsaSignBytesResults {
-    let private_key_string = unsafe {
-        assert!(!private_key.is_null());
-
-        CStr::from_ptr(private_key)
-    }
-    .to_str()
-    .unwrap()
-    .to_string();
-
-    let data_to_sign_slice = unsafe {
-        assert!(!data_to_sign.is_null());
-        std::slice::from_raw_parts(data_to_sign, data_to_sign_length)
-    }.to_vec();
+    let private_key_string = match string_from_c_str(private_key) {
+        Ok(value) => value,
+        Err(e) => return RsaSignBytesResults { signature_raw_ptr: std::ptr::null_mut(), length: 0, error_code: cas_error_code(&e) },
+    };
+    let data_to_sign_slice = match bytes_from_ffi(data_to_sign, data_to_sign_length) {
+        Ok(value) => value,
+        Err(e) => return RsaSignBytesResults { signature_raw_ptr: std::ptr::null_mut(), length: 0, error_code: cas_error_code(&e) },
+    };
     match sign(private_key_string, data_to_sign_slice) {
         Ok(signed_data) => {
             let result = RsaSignBytesResults {
@@ -118,25 +119,12 @@ fn rsa_verify(
     signature_length: usize,
     verify: fn(String, Vec<u8>, Vec<u8>) -> CasResult<bool>,
 ) -> CasVerifyResult {
-    let public_key_string = unsafe {
-        assert!(!public_key.is_null());
-
-        CStr::from_ptr(public_key)
-    }
-    .to_str()
-    .unwrap()
-    .to_string();
-
-    let data_to_verify_slice = unsafe {
-        assert!(!data_to_verify.is_null());
-        std::slice::from_raw_parts(data_to_verify, data_to_verify_length)
-    }.to_vec();
-
-    let signature_slice = unsafe {
-        assert!(!signature.is_null());
-        std::slice::from_raw_parts(signature, signature_length)
-    }.to_vec();
-    match verify(public_key_string, data_to_verify_slice, signature_slice) {
+    match (|| {
+        let public_key_string = string_from_c_str(public_key)?;
+        let data_to_verify_slice = bytes_from_ffi(data_to_verify, data_to_verify_length)?;
+        let signature_slice = bytes_from_ffi(signature, signature_length)?;
+        verify(public_key_string, data_to_verify_slice, signature_slice)
+    })() {
         Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
         Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
     }
