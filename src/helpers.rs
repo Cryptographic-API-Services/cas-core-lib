@@ -99,6 +99,45 @@ pub fn bytes_from_ffi(ptr: *const c_uchar, length: usize) -> Result<Vec<u8>, Cas
     Ok(unsafe { std::slice::from_raw_parts(ptr, length) }.to_vec())
 }
 
+/// Rebuilds a UTF-8 string (e.g. a password) from a pointer + length pair
+/// without panicking. cas-lib's password hashers take `String`, so bytes that
+/// are not valid UTF-8 return `InvalidInput`, as does a null pointer with a
+/// non-zero length. Embedded NUL bytes are kept: they are valid UTF-8.
+///
+/// On failure the copied bytes are dropped through `ZeroAlloc`, which wipes them.
+pub(crate) fn utf8_from_ffi(ptr: *const c_uchar, length: usize) -> Result<String, CasError> {
+    String::from_utf8(bytes_from_ffi(ptr, length)?).map_err(|_| CasError::InvalidInput)
+}
+
+/// Reads a NUL-terminated UTF-8 C string without panicking. A null pointer or
+/// bytes that are not valid UTF-8 return `InvalidInput`. The string ends at the
+/// first NUL, so use a pointer + length variant for data that may contain one.
+pub(crate) fn string_from_c_str(ptr: *const c_char) -> Result<String, CasError> {
+    if ptr.is_null() {
+        return Err(CasError::InvalidInput);
+    }
+    let bytes = unsafe { std::ffi::CStr::from_ptr(ptr) }.to_bytes().to_vec();
+    String::from_utf8(bytes).map_err(|_| CasError::InvalidInput)
+}
+
+/// Turns a cas-lib string result into a [`CasStringResult`]. A string with an
+/// interior NUL can't be returned as a C string and reports
+/// `PasswordHashingFailed`; hashes never contain one.
+pub(crate) fn string_result(result: Result<String, CasError>) -> CasStringResult {
+    match result.and_then(|value| CString::new(value).map_err(|_| CasError::PasswordHashingFailed)) {
+        Ok(value) => CasStringResult { value: value.into_raw(), error_code: 0 },
+        Err(e) => CasStringResult { value: std::ptr::null_mut(), error_code: cas_error_code(&e) },
+    }
+}
+
+/// Turns a cas-lib verify result into a [`CasVerifyResult`].
+pub(crate) fn verify_result(result: Result<bool, CasError>) -> CasVerifyResult {
+    match result {
+        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
+        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
+    }
+}
+
 // Copies a returned buffer. The original is leaked, like the other inline tests do.
 #[cfg(test)]
 pub fn take_bytes(ptr: *mut c_uchar, length: usize) -> Vec<u8> {
@@ -183,6 +222,7 @@ fn free_cstring_round_trip_test() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn free_bytes_releases_ffi_results_test() {
     let aes_key = crate::aes::aes_256_key();
     assert_eq!(aes_key.length, 32);
