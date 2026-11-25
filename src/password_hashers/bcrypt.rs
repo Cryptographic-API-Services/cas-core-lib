@@ -1,45 +1,62 @@
-use std::{
-    ffi::{c_char, CStr, CString}
-};
-use cas_lib::password_hashers::{bcrypt::CASBCrypt};
-use crate::helpers::{cas_error_code, CasStringResult, CasVerifyResult};
+use crate::helpers::{cas_error_code, string_from_c_str, string_result, utf8_from_ffi, verify_result, CasStringResult, CasVerifyResult};
+use cas_lib::password_hashers::bcrypt::CASBCrypt;
+use std::ffi::{c_char, c_uchar, CString};
 
-/// Hashes with bcrypt. `cost` must be 10–16; out-of-range values return
-/// `InvalidParameters` (6).
+// Passwords cross the ABI as a pointer + length (`*_bytes` functions), so they
+// may contain NUL bytes. cas-lib takes them as `String`: bytes that are not
+// valid UTF-8 return `InvalidInput` (4). Passwords over 72 bytes return
+// `InvalidParameters` (6); bcrypt never truncates them. None of these
+// functions panic: a null pointer with a non-zero length returns `InvalidInput`.
+
+/// Hashes a password with bcrypt. `cost` must be 10–16; out-of-range values
+/// return `InvalidParameters` (6). The password is `password_length` bytes of
+/// UTF-8 (at most 72) and may contain NUL bytes. The bytes are `password_bytes`.
 #[no_mangle]
-pub extern "C" fn bcrypt_hash_with_parameters(pass_to_hash: *const c_char, cost: u32) -> CasStringResult {
-    let string_pass = unsafe {
-        assert!(!pass_to_hash.is_null());
-
-        CStr::from_ptr(pass_to_hash)
-    }
-    .to_str()
-    .unwrap()
-    .to_string();
-    match CASBCrypt::hash_password_customized(string_pass, cost) {
-        Ok(new_hashed) => CasStringResult { value: CString::new(new_hashed).unwrap().into_raw(), error_code: 0 },
-        Err(e) => CasStringResult { value: std::ptr::null_mut(), error_code: cas_error_code(&e) },
-    }
+pub extern "C" fn bcrypt_hash_with_parameters_bytes(password_bytes: *const c_uchar, password_length: usize, cost: u32) -> CasStringResult {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(|password| CASBCrypt::hash_password_customized(password, cost)))
 }
 
+/// Hashes a password with bcrypt at the default cost (12). The password is
+/// `password_bytes` (`password_length` bytes of UTF-8, at most 72) and may contain NUL bytes.
+#[no_mangle]
+pub extern "C" fn bcrypt_hash_bytes(password_bytes: *const c_uchar, password_length: usize) -> CasStringResult {
+    string_result(utf8_from_ffi(password_bytes, password_length).and_then(CASBCrypt::hash_password))
+}
 
+/// Verifies a password against a bcrypt hash (a NUL-terminated string). The
+/// password is `password_bytes` (`password_length` bytes of UTF-8, at most 72).
+#[no_mangle]
+pub extern "C" fn bcrypt_verify_bytes(password_bytes: *const c_uchar, password_length: usize, hash: *const c_char) -> CasVerifyResult {
+    verify_result(utf8_from_ffi(password_bytes, password_length).and_then(|password| Ok((password, string_from_c_str(hash)?))).and_then(|(password, hash)| CASBCrypt::verify_password(hash, password)))
+}
+
+/// Deprecated: the password is a C string, so it ends at the first NUL byte.
+/// Use `bcrypt_hash_with_parameters_bytes`. A null pointer or invalid UTF-8
+/// returns `InvalidInput` (4); out-of-range `cost` returns `InvalidParameters` (6).
+#[deprecated(note = "the password is cut at the first NUL byte; use bcrypt_hash_with_parameters_bytes")]
+#[no_mangle]
+pub extern "C" fn bcrypt_hash_with_parameters(pass_to_hash: *const c_char, cost: u32) -> CasStringResult {
+    string_result(string_from_c_str(pass_to_hash).and_then(|password| CASBCrypt::hash_password_customized(password, cost)))
+}
+
+/// Deprecated: the password is a C string, so it ends at the first NUL byte.
+/// Use `bcrypt_hash_bytes`. A null pointer or invalid UTF-8 returns `InvalidInput` (4).
+#[deprecated(note = "the password is cut at the first NUL byte; use bcrypt_hash_bytes")]
 #[no_mangle]
 pub extern "C" fn bcrypt_hash(pass_to_hash: *const c_char) -> CasStringResult {
-    let string_pass = unsafe {
-        assert!(!pass_to_hash.is_null());
+    string_result(string_from_c_str(pass_to_hash).and_then(CASBCrypt::hash_password))
+}
 
-        CStr::from_ptr(pass_to_hash)
-    }
-    .to_str()
-    .unwrap()
-    .to_string();
-    match CASBCrypt::hash_password(string_pass) {
-        Ok(new_hashed) => CasStringResult { value: CString::new(new_hashed).unwrap().into_raw(), error_code: 0 },
-        Err(e) => CasStringResult { value: std::ptr::null_mut(), error_code: cas_error_code(&e) },
-    }
+/// Deprecated: the password is a C string, so it ends at the first NUL byte.
+/// Use `bcrypt_verify_bytes`. A null pointer or invalid UTF-8 returns `InvalidInput` (4).
+#[deprecated(note = "the password is cut at the first NUL byte; use bcrypt_verify_bytes")]
+#[no_mangle]
+pub extern "C" fn bcrypt_verify(pass: *const c_char, hash: *const c_char) -> CasVerifyResult {
+    verify_result(string_from_c_str(pass).and_then(|password| Ok((password, string_from_c_str(hash)?))).and_then(|(password, hash)| CASBCrypt::verify_password(hash, password)))
 }
 
 #[test]
+#[allow(deprecated)]
 fn bcrypt_hash_test() {
     let password = "PasswordToHash";
     let password_cstr = CString::new(password).unwrap();
@@ -51,32 +68,8 @@ fn bcrypt_hash_test() {
     assert_ne!(hashed_password_str, password);
 }
 
-#[no_mangle]
-pub extern "C" fn bcrypt_verify(pass: *const c_char, hash: *const c_char) -> CasVerifyResult {
-    let string_pass = unsafe {
-        assert!(!pass.is_null());
-
-        CStr::from_ptr(pass)
-    }
-    .to_str()
-    .unwrap()
-    .to_string();
-
-    let string_hash = unsafe {
-        assert!(!hash.is_null());
-
-        CStr::from_ptr(hash)
-    }
-    .to_str()
-    .unwrap()
-    .to_string();
-    match CASBCrypt::verify_password(string_hash, string_pass) {
-        Ok(is_valid) => CasVerifyResult { is_valid, error_code: 0 },
-        Err(e) => CasVerifyResult { is_valid: false, error_code: cas_error_code(&e) },
-    }
-}
-
 #[test]
+#[allow(deprecated)]
 fn bcrypt_verify_test() {
     let password = "PasswordToHash";
     let password_cstr = CString::new(password).unwrap();
@@ -91,6 +84,7 @@ fn bcrypt_verify_test() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn bcrypt_72_byte_password_hashes_and_verifies_test() {
     // 24 three-byte characters: exactly 72 bytes of UTF-8, the bcrypt maximum.
     let password_cstr = CString::new("€".repeat(24)).unwrap();
@@ -104,6 +98,7 @@ fn bcrypt_72_byte_password_hashes_and_verifies_test() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn bcrypt_rejects_password_over_72_bytes_test() {
     let invalid_parameters = cas_error_code(&cas_lib::error::CasError::InvalidParameters);
     let short_cstr = CString::new("a".repeat(72)).unwrap();
@@ -126,8 +121,8 @@ fn bcrypt_rejects_password_over_72_bytes_test() {
     unsafe { drop(CString::from_raw(short_hash.value)) };
 }
 
-
 #[test]
+#[allow(deprecated)]
 fn bcrypt_hash_with_parameters_bounds_test() {
     let invalid_parameters = cas_error_code(&cas_lib::error::CasError::InvalidParameters);
     let password = CString::new("DoNotUseThisPassword").unwrap();
@@ -151,6 +146,7 @@ fn bcrypt_hash_with_parameters_bounds_test() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn bcrypt_verify_accepts_hash_below_minimum_cost_test() {
     // Older hashes below today's minimum cost still verify (bcrypt crate test vector, cost 4).
     let password = CString::new("correctbatteryhorsestapler").unwrap();
@@ -158,4 +154,90 @@ fn bcrypt_verify_accepts_hash_below_minimum_cost_test() {
     let is_valid = bcrypt_verify(password.as_ptr(), hash.as_ptr());
     assert_eq!(0, is_valid.error_code);
     assert!(is_valid.is_valid);
+}
+
+#[cfg(test)]
+fn bcrypt_hash_bytes_value(bytes: &[u8]) -> CString {
+    let hash = bcrypt_hash_with_parameters_bytes(bytes.as_ptr(), bytes.len(), 10);
+    assert_eq!(0, hash.error_code);
+    unsafe { CString::from_raw(hash.value) }
+}
+
+#[test]
+fn bcrypt_bytes_round_trip_test() {
+    let password = b"PasswordToHash";
+    let hash = bcrypt_hash_bytes(password.as_ptr(), password.len());
+    assert_eq!(0, hash.error_code);
+    let is_valid = bcrypt_verify_bytes(password.as_ptr(), password.len(), hash.value);
+    assert_eq!(0, is_valid.error_code);
+    assert!(is_valid.is_valid);
+    let wrong = b"PasswordToHasH";
+    let is_valid = bcrypt_verify_bytes(wrong.as_ptr(), wrong.len(), hash.value);
+    assert_eq!(0, is_valid.error_code);
+    assert!(!is_valid.is_valid);
+    crate::helpers::free_cstring(hash.value);
+}
+
+#[test]
+#[allow(deprecated)]
+fn bcrypt_bytes_keeps_embedded_nul_test() {
+    let password = b"abc\0def";
+    let hash = bcrypt_hash_bytes_value(password);
+    let is_valid = bcrypt_verify_bytes(password.as_ptr(), password.len(), hash.as_ptr());
+    assert!(is_valid.is_valid);
+    // The bytes after the NUL count: the prefix alone does not verify, by either API.
+    let is_valid = bcrypt_verify_bytes(password.as_ptr(), 3, hash.as_ptr());
+    assert_eq!(0, is_valid.error_code);
+    assert!(!is_valid.is_valid);
+    let prefix = CString::new("abc").unwrap();
+    let is_valid = bcrypt_verify(prefix.as_ptr(), hash.as_ptr());
+    assert_eq!(0, is_valid.error_code);
+    assert!(!is_valid.is_valid);
+}
+
+#[test]
+fn bcrypt_bytes_72_vs_73_byte_password_test() {
+    let invalid_parameters = cas_error_code(&cas_lib::error::CasError::InvalidParameters);
+    let long = [b'a'; 73];
+    let short_hash = bcrypt_hash_bytes_value(&long[..72]);
+    let is_valid = bcrypt_verify_bytes(long.as_ptr(), 72, short_hash.as_ptr());
+    assert_eq!(0, is_valid.error_code);
+    assert!(is_valid.is_valid);
+
+    let hash = bcrypt_hash_bytes(long.as_ptr(), long.len());
+    assert!(hash.value.is_null());
+    assert_eq!(invalid_parameters, hash.error_code);
+    let hash = bcrypt_hash_with_parameters_bytes(long.as_ptr(), long.len(), 10);
+    assert!(hash.value.is_null());
+    assert_eq!(invalid_parameters, hash.error_code);
+    // A 73-byte password must not verify against the hash of its first 72 bytes.
+    let is_valid = bcrypt_verify_bytes(long.as_ptr(), long.len(), short_hash.as_ptr());
+    assert!(!is_valid.is_valid);
+    assert_eq!(invalid_parameters, is_valid.error_code);
+}
+
+#[test]
+#[allow(deprecated)]
+fn bcrypt_rejects_invalid_utf8_and_null_test() {
+    let invalid_input = cas_error_code(&cas_lib::error::CasError::InvalidInput);
+    let invalid_utf8 = [b'a', 0xff, 0xfe, b'b'];
+    let invalid_utf8_cstr = CString::new(invalid_utf8.to_vec()).unwrap();
+    let hash = bcrypt_hash_bytes_value(b"DoNotUseThisPassword");
+
+    for result in [bcrypt_hash_bytes(invalid_utf8.as_ptr(), invalid_utf8.len()), bcrypt_hash_with_parameters_bytes(invalid_utf8.as_ptr(), invalid_utf8.len(), 10), bcrypt_hash_bytes(std::ptr::null(), 8), bcrypt_hash(invalid_utf8_cstr.as_ptr()), bcrypt_hash(std::ptr::null()), bcrypt_hash_with_parameters(invalid_utf8_cstr.as_ptr(), 10), bcrypt_hash_with_parameters(std::ptr::null(), 10)] {
+        assert!(result.value.is_null());
+        assert_eq!(invalid_input, result.error_code);
+    }
+    for result in [
+        bcrypt_verify_bytes(invalid_utf8.as_ptr(), invalid_utf8.len(), hash.as_ptr()),
+        bcrypt_verify_bytes(std::ptr::null(), 8, hash.as_ptr()),
+        bcrypt_verify_bytes(b"x".as_ptr(), 1, std::ptr::null()),
+        bcrypt_verify_bytes(b"x".as_ptr(), 1, invalid_utf8_cstr.as_ptr()),
+        bcrypt_verify(invalid_utf8_cstr.as_ptr(), hash.as_ptr()),
+        bcrypt_verify(std::ptr::null(), hash.as_ptr()),
+        bcrypt_verify(hash.as_ptr(), std::ptr::null()),
+    ] {
+        assert!(!result.is_valid);
+        assert_eq!(invalid_input, result.error_code);
+    }
 }

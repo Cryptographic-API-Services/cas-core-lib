@@ -123,6 +123,7 @@ fn free_zstd_results_test() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn free_password_hasher_results_test() {
     let password = CString::new("DoNotUseThisPassword").unwrap();
     for hash in [argon2::argon2_hash, bcrypt::bcrypt_hash, scrypt::scrypt_hash] {
