@@ -171,6 +171,7 @@ fn scrypt_bytes_round_trip_test() {
 #[test]
 #[allow(deprecated)]
 fn scrypt_bytes_keeps_embedded_nul_test() {
+    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let password = b"abc\0def";
     let hash = scrypt_hash_bytes_value(password);
     let is_valid = scrypt_verify_bytes(hash.as_ptr(), password.as_ptr(), password.len());
@@ -190,6 +191,7 @@ fn scrypt_rejects_invalid_utf8_and_null_test() {
     let invalid_input = cas_error_code(&cas_lib::error::CasError::InvalidInput);
     let invalid_utf8 = [b'a', 0xff, 0xfe, b'b'];
     let invalid_utf8_cstr = CString::new(invalid_utf8.to_vec()).unwrap();
+    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let hash = scrypt_hash_bytes_value(b"DoNotUseThisPassword");
 
     for result in [
