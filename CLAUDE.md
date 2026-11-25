@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CAS Core Lib is a Rust crate that exposes a C-compatible FFI layer over [`cas-lib`](https://crates.io/crates/cas-lib), the crate that holds the actual cryptographic implementations. This crate itself contains almost no cryptography logic — it is the marshalling boundary that lets higher-level SDKs (.NET, Node.js/TypeScript) call into Rust crypto across the FFI.
 
-The crate compiles to a dynamic library (`crate-type = ["dylib"]`), producing `cas_core_lib.dll` (Windows) / `libcas_core_lib.so` (Linux) / `libcas_core_lib.dylib` (macOS) that consumers load and bind to. Released builds are attached to GitHub Releases (see Releases).
+The crate compiles to a C dynamic library (`crate-type = ["cdylib", "rlib"]`), producing `cas_core_lib.dll` (Windows) / `libcas_core_lib.so` (Linux) / `libcas_core_lib.dylib` (macOS) that consumers load and bind to. The `cdylib` exports only the `#[no_mangle]` C functions. The `rlib` is there so `cargo test` can link the crate. Released builds are attached to GitHub Releases (see Releases).
 
 ## Commands
 
@@ -82,7 +82,7 @@ The crate isn't published to crates.io; a release is a `v<version>` tag plus a G
 3. Only then does the `build` matrix run, with a read-only token, on `ubuntu-latest` (x86_64 Linux), `windows-latest` (x86_64 Windows) and `macos-latest` (arm64 macOS). Each job checks out the tag, installs the toolchain from `rust-toolchain.toml`, fails if the tag isn't `v<Cargo.toml version>`, runs `cargo test --release --locked` and then `cargo build --release --locked`, and uploads the library plus the `NativeMethods.g.cs` that `build.rs` generated (the build sets `CAS_DOTNET_BINDINGS_DIR=bindings`).
 4. The `upload` job runs in the `release` environment with `contents: write` only. It checks that the three `NativeMethods.g.cs` copies are identical (ignoring CRLF), writes `SHA256SUMS`, and attaches `libcas_core_lib.so`, `cas_core_lib.dll`, `libcas_core_lib.dylib`, `NativeMethods.g.cs` and `SHA256SUMS` with `gh release upload`. It never overwrites assets: if it fails halfway, delete the partial assets from the release by hand and rerun the job.
 
-The assets keep the file names cargo produces, which are the names .NET resolves for `[DllImport("cas_core_lib")]`, so cas-dotnet-sdk can vendor them unchanged. They are the same for `crate-type = ["dylib"]` (today) and `cdylib` (#102). When adding a target, add it to the `build` matrix and to the `cp` list in `upload` together; two targets for one OS (e.g. Linux arm64) would need distinct asset names.
+The assets keep the file names cargo produces, which are the names .NET resolves for `[DllImport("cas_core_lib")]`, so cas-dotnet-sdk can vendor them unchanged.  When adding a target, add it to the `build` matrix and to the `cp` list in `upload` together; two targets for one OS (e.g. Linux arm64) would need distinct asset names.
 
 `changelog-sections` maps commit types to cas-lib's groups: `feat` → Added, `changed` → Changed, `deprecated` → Deprecated, `fix` → Fixed, `security` → Security, `docs` → Documentation, everything else → Other; `!` commits are also listed under Breaking changes. release-please has no catch-all, so a commit type it doesn't list is left out of the changelog. `bootstrap-sha` is the `main` commit before the first release-please release, and the manifest starts at `0.3.0` (never tagged); add `release-as` to the package in `release-please-config.json` to pin a specific version, and remove it after that release.
 
