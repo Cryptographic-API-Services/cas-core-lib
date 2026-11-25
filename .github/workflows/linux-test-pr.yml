@@ -25,7 +25,11 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         persist-credentials: false
+    - name: Install toolchain from rust-toolchain.toml
+      run: rustup toolchain install
+    # --locked fails the build if Cargo.toml and the committed Cargo.lock
+    # disagree (#110). --release tests the profile consumers ship.
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --release --locked --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --release --locked --verbose
