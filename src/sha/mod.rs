@@ -3,6 +3,7 @@ use std::ffi::c_uchar;
 use cas_lib::hashers::{cas_hasher::CASHasher, sha::CASSHA, sha2::CASSHA2};
 
 use self::types::SHAHashByteResult;
+use crate::helpers::export_bytes;
 mod types;
 
 // Algorithms exposed here:
@@ -29,14 +30,11 @@ fn input_bytes(ptr: *const c_uchar, len: usize) -> Vec<u8> {
     unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec()
 }
 
-fn into_result(mut result: Vec<u8>) -> SHAHashByteResult {
-    let capacity = result.capacity();
-    result.reserve_exact(capacity);
+fn into_result(result: Vec<u8>) -> SHAHashByteResult {
     let return_result = SHAHashByteResult {
-        result_bytes_ptr: result.as_mut_ptr(),
+        result_bytes_ptr: export_bytes(&result),
         length: result.len(),
     };
-    std::mem::forget(result);
     return_result
 }
 
