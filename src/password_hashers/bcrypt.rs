@@ -157,8 +157,8 @@ fn bcrypt_verify_accepts_hash_below_minimum_cost_test() {
 }
 
 #[cfg(test)]
-fn bcrypt_hash_bytes_value(password: &[u8]) -> CString {
-    let hash = bcrypt_hash_with_parameters_bytes(password.as_ptr(), password.len(), 10);
+fn bcrypt_hash_bytes_value(bytes: &[u8]) -> CString {
+    let hash = bcrypt_hash_with_parameters_bytes(bytes.as_ptr(), bytes.len(), 10);
     assert_eq!(0, hash.error_code);
     unsafe { CString::from_raw(hash.value) }
 }
@@ -181,7 +181,6 @@ fn bcrypt_bytes_round_trip_test() {
 #[test]
 #[allow(deprecated)]
 fn bcrypt_bytes_keeps_embedded_nul_test() {
-    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let password = b"abc\0def";
     let hash = bcrypt_hash_bytes_value(password);
     let is_valid = bcrypt_verify_bytes(password.as_ptr(), password.len(), hash.as_ptr());
@@ -199,7 +198,6 @@ fn bcrypt_bytes_keeps_embedded_nul_test() {
 #[test]
 fn bcrypt_bytes_72_vs_73_byte_password_test() {
     let invalid_parameters = cas_error_code(&cas_lib::error::CasError::InvalidParameters);
-    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let long = [b'a'; 73];
     let short_hash = bcrypt_hash_bytes_value(&long[..72]);
     let is_valid = bcrypt_verify_bytes(long.as_ptr(), 72, short_hash.as_ptr());
@@ -224,7 +222,6 @@ fn bcrypt_rejects_invalid_utf8_and_null_test() {
     let invalid_input = cas_error_code(&cas_lib::error::CasError::InvalidInput);
     let invalid_utf8 = [b'a', 0xff, 0xfe, b'b'];
     let invalid_utf8_cstr = CString::new(invalid_utf8.to_vec()).unwrap();
-    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let hash = bcrypt_hash_bytes_value(b"DoNotUseThisPassword");
 
     for result in [bcrypt_hash_bytes(invalid_utf8.as_ptr(), invalid_utf8.len()), bcrypt_hash_with_parameters_bytes(invalid_utf8.as_ptr(), invalid_utf8.len(), 10), bcrypt_hash_bytes(std::ptr::null(), 8), bcrypt_hash(invalid_utf8_cstr.as_ptr()), bcrypt_hash(std::ptr::null()), bcrypt_hash_with_parameters(invalid_utf8_cstr.as_ptr(), 10), bcrypt_hash_with_parameters(std::ptr::null(), 10)] {

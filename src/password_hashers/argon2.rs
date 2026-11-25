@@ -361,15 +361,14 @@ fn argon2_derive_aes_key_with_salt_bad_input_test() {
 }
 
 #[cfg(test)]
-fn argon2_hash_bytes_value(password: &[u8]) -> CString {
-    let hash = argon2_hash_password_parameters_bytes(19, 1, 1, password.as_ptr(), password.len());
+fn argon2_hash_bytes_value(bytes: &[u8]) -> CString {
+    let hash = argon2_hash_password_parameters_bytes(19, 1, 1, bytes.as_ptr(), bytes.len());
     assert_eq!(0, hash.error_code);
     unsafe { CString::from_raw(hash.value) }
 }
 
 #[test]
 fn argon2_bytes_round_trip_test() {
-    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let password = b"PasswordToVerify";
     let hash = argon2_hash_bytes(password.as_ptr(), password.len());
     assert_eq!(0, hash.error_code);
@@ -389,7 +388,6 @@ fn argon2_bytes_round_trip_test() {
 #[test]
 #[allow(deprecated)]
 fn argon2_bytes_keeps_embedded_nul_test() {
-    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let password = b"abc\0def";
     let hash = argon2_hash_bytes_value(password);
     let is_valid = argon2_verify_bytes(hash.as_ptr(), password.as_ptr(), password.len());
@@ -409,7 +407,6 @@ fn argon2_rejects_invalid_utf8_and_null_test() {
     let invalid_input = cas_error_code(&CasError::InvalidInput);
     let invalid_utf8 = [b'a', 0xff, 0xfe, b'b'];
     let invalid_utf8_cstr = CString::new(invalid_utf8.to_vec()).unwrap();
-    // codeql[rust/hard-coded-cryptographic-value]: test vector, not a credential
     let hash = argon2_hash_bytes_value(b"DoNotUseThisPassword");
 
     for result in [
