@@ -1,9 +1,11 @@
 use std::ffi::c_uchar;
 
+use cas_lib::error::CasError;
 use cas_lib::hashers::{cas_hasher::CASHasher, sha::CASSHA, sha2::CASSHA2};
 
 use self::types::SHAHashByteResult;
 use crate::helpers::export_bytes;
+use crate::helpers::{cas_error_code, CasVerifyResult};
 mod types;
 
 // Algorithms exposed here:
@@ -14,24 +16,50 @@ mod types;
 //   they are thin aliases of the `sha3_*` functions.
 //
 // Every function accepts empty input: a zero-length buffer hashes as the empty message,
-// and a null pointer is allowed when its length is 0.
+// and a null pointer is allowed when its length is 0. A null pointer with a non-zero
+// length is invalid input and never panics across the FFI: the hash functions return a
+// null `result_bytes_ptr` with `length == 0` (a real digest is never empty), and the
+// verify functions return `CasVerifyResult { is_valid: false, error_code: 4 }`
+// (`CasError::InvalidInput`).
+//
+// Verification delegates to cas-lib's `CASHasher::verify_*`, which compares the digests
+// in constant time (`subtle::ConstantTimeEq`) from cas-lib 0.3.0 on.
 
-/// Rebuilds an input buffer from a pointer + length pair.
+/// Rebuilds an input buffer from a pointer + length pair, or `None` if the
+/// pointer is null while `len > 0`.
 ///
 /// Hashing the empty message is valid (it has a well-defined digest), and FFI
 /// callers commonly marshal a zero-length array as a null pointer. So a null
 /// pointer is accepted when `len == 0`; it is only rejected when `len > 0`.
 /// `slice::from_raw_parts` must never be called with a null pointer (even for
 /// length 0), hence the early return.
-fn input_bytes(ptr: *const c_uchar, len: usize) -> Vec<u8> {
+pub(crate) fn input_bytes(ptr: *const c_uchar, len: usize) -> Option<Vec<u8>> {
     if len == 0 {
-        return Vec::new();
+        return Some(Vec::new());
     }
-    assert!(!ptr.is_null());
-    unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec()
+    if ptr.is_null() {
+        return None;
+    }
+    Some(unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec())
 }
 
-fn into_result(result: Vec<u8>) -> SHAHashByteResult {
+/// Runs a cas-lib verify on a digest and the data it should be the hash of,
+/// reporting a null pointer with a non-zero length as `InvalidInput`.
+pub(crate) fn verify_digest(
+    digest: Option<Vec<u8>>,
+    data: Option<Vec<u8>>,
+    verify: fn(Vec<u8>, Vec<u8>) -> bool,
+) -> CasVerifyResult {
+    match (digest, data) {
+        (Some(digest), Some(data)) => CasVerifyResult { is_valid: verify(digest, data), error_code: 0 },
+        _ => CasVerifyResult { is_valid: false, error_code: cas_error_code(&CasError::InvalidInput) },
+    }
+}
+
+fn into_result(result: Option<Vec<u8>>) -> SHAHashByteResult {
+    let Some(result) = result else {
+        return SHAHashByteResult { result_bytes_ptr: std::ptr::null_mut(), length: 0 };
+    };
     let return_result = SHAHashByteResult {
         result_bytes_ptr: export_bytes(&result),
         length: result.len(),
@@ -40,11 +68,11 @@ fn into_result(result: Vec<u8>) -> SHAHashByteResult {
 }
 
 fn hash_256<H: CASHasher>(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
-    into_result(H::hash_256(input_bytes(data_to_hash, data_len)))
+    into_result(input_bytes(data_to_hash, data_len).map(H::hash_256))
 }
 
 fn hash_512<H: CASHasher>(data_to_hash: *const c_uchar, data_len: usize) -> SHAHashByteResult {
-    into_result(H::hash_512(input_bytes(data_to_hash, data_len)))
+    into_result(input_bytes(data_to_hash, data_len).map(H::hash_512))
 }
 
 fn verify_256<H: CASHasher>(
@@ -52,10 +80,12 @@ fn verify_256<H: CASHasher>(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
-    let data = input_bytes(data_to_hash, data_len);
-    let hash = input_bytes(data_to_verify, data_to_verify_len);
-    H::verify_256(hash, data)
+) -> CasVerifyResult {
+    verify_digest(
+        input_bytes(data_to_verify, data_to_verify_len),
+        input_bytes(data_to_hash, data_len),
+        H::verify_256,
+    )
 }
 
 fn verify_512<H: CASHasher>(
@@ -63,10 +93,12 @@ fn verify_512<H: CASHasher>(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
-    let data = input_bytes(data_to_hash, data_len);
-    let hash = input_bytes(data_to_verify, data_to_verify_len);
-    H::verify_512(hash, data)
+) -> CasVerifyResult {
+    verify_digest(
+        input_bytes(data_to_verify, data_to_verify_len),
+        input_bytes(data_to_hash, data_len),
+        H::verify_512,
+    )
 }
 
 // ---- SHA-2 ----
@@ -82,7 +114,7 @@ pub extern "C" fn sha2_256_bytes_verify(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
+) -> CasVerifyResult {
     verify_256::<CASSHA2>(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
@@ -97,7 +129,7 @@ pub extern "C" fn sha2_512_bytes_verify(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
+) -> CasVerifyResult {
     verify_512::<CASSHA2>(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
@@ -114,7 +146,7 @@ pub extern "C" fn sha3_256_bytes_verify(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
+) -> CasVerifyResult {
     verify_256::<CASSHA>(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
@@ -129,7 +161,7 @@ pub extern "C" fn sha3_512_bytes_verify(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
+) -> CasVerifyResult {
     verify_512::<CASSHA>(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
@@ -156,7 +188,7 @@ pub extern "C" fn sha512_bytes_verify(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
+) -> CasVerifyResult {
     sha3_512_bytes_verify(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
@@ -175,7 +207,7 @@ pub extern "C" fn sha256_bytes_verify(
     data_len: usize,
     data_to_verify: *const c_uchar,
     data_to_verify_len: usize,
-) -> bool {
+) -> CasVerifyResult {
     sha3_256_bytes_verify(data_to_hash, data_len, data_to_verify, data_to_verify_len)
 }
 
@@ -187,7 +219,7 @@ mod tests {
     use super::*;
 
     type HashFn = extern "C" fn(*const c_uchar, usize) -> SHAHashByteResult;
-    type VerifyFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize) -> bool;
+    type VerifyFn = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize) -> CasVerifyResult;
 
     const SHA2_256_EMPTY: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     const SHA2_256_ABC: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -207,6 +239,17 @@ mod tests {
     fn to_hex(result: &SHAHashByteResult) -> String {
         let bytes = unsafe { std::slice::from_raw_parts(result.result_bytes_ptr, result.length) };
         bytes.iter().map(|b| format!("{:02x}", b)).collect()
+    }
+
+    /// Unwraps a verify result that must not have reported an error.
+    fn valid(result: CasVerifyResult) -> bool {
+        assert_eq!(0, result.error_code);
+        result.is_valid
+    }
+
+    fn assert_invalid_input(result: CasVerifyResult) {
+        assert!(!result.is_valid);
+        assert_eq!(cas_error_code(&CasError::InvalidInput), result.error_code);
     }
 
     fn from_hex(hex: &str) -> Vec<u8> {
@@ -230,11 +273,21 @@ mod tests {
         let empty_digest = from_hex(empty_hex);
         let abc_digest = from_hex(abc_hex);
         let msg_448_digest = from_hex(msg_448_hex);
-        assert!(verify(abc.as_ptr(), abc.len(), abc_digest.as_ptr(), abc_digest.len()));
-        assert!(verify(MSG_448.as_ptr(), MSG_448.len(), msg_448_digest.as_ptr(), msg_448_digest.len()));
-        assert!(verify(std::ptr::null(), 0, empty_digest.as_ptr(), empty_digest.len()));
-        assert!(!verify(std::ptr::null(), 0, abc_digest.as_ptr(), abc_digest.len()));
-        assert!(!verify(abc.as_ptr(), abc.len(), empty_digest.as_ptr(), empty_digest.len()));
+        assert!(valid(verify(abc.as_ptr(), abc.len(), abc_digest.as_ptr(), abc_digest.len())));
+        assert!(valid(verify(MSG_448.as_ptr(), MSG_448.len(), msg_448_digest.as_ptr(), msg_448_digest.len())));
+        assert!(valid(verify(std::ptr::null(), 0, empty_digest.as_ptr(), empty_digest.len())));
+        assert!(!valid(verify(std::ptr::null(), 0, abc_digest.as_ptr(), abc_digest.len())));
+        assert!(!valid(verify(abc.as_ptr(), abc.len(), empty_digest.as_ptr(), empty_digest.len())));
+        // Truncated digest and empty digest: a mismatch, not an error.
+        assert!(!valid(verify(abc.as_ptr(), abc.len(), abc_digest.as_ptr(), abc_digest.len() - 1)));
+        assert!(!valid(verify(abc.as_ptr(), abc.len(), std::ptr::null(), 0)));
+
+        // A null pointer with a non-zero length is reported, not a panic.
+        let null_hash = hash(std::ptr::null(), 3);
+        assert!(null_hash.result_bytes_ptr.is_null());
+        assert_eq!(0, null_hash.length);
+        assert_invalid_input(verify(std::ptr::null(), 3, abc_digest.as_ptr(), abc_digest.len()));
+        assert_invalid_input(verify(abc.as_ptr(), abc.len(), std::ptr::null(), abc_digest.len()));
     }
 
     #[test]
@@ -276,7 +329,7 @@ mod tests {
         assert_ne!(to_hex(&sha512_bytes(abc.as_ptr(), abc.len())), SHA2_512_ABC);
         let sha2_256 = from_hex(SHA2_256_ABC);
         let sha2_512 = from_hex(SHA2_512_ABC);
-        assert!(!sha256_bytes_verify(abc.as_ptr(), abc.len(), sha2_256.as_ptr(), sha2_256.len()));
-        assert!(!sha512_bytes_verify(abc.as_ptr(), abc.len(), sha2_512.as_ptr(), sha2_512.len()));
+        assert!(!valid(sha256_bytes_verify(abc.as_ptr(), abc.len(), sha2_256.as_ptr(), sha2_256.len())));
+        assert!(!valid(sha512_bytes_verify(abc.as_ptr(), abc.len(), sha2_512.as_ptr(), sha2_512.len())));
     }
 }
