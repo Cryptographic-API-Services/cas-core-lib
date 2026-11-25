@@ -98,3 +98,27 @@ fn get_key_pair_test() {
     assert!(!key_pair.pub_key.is_null());
     assert!(!key_pair.priv_key.is_null());
 }
+
+#[test]
+fn get_key_pair_rejects_1024_bits_test() {
+    let key_pair = get_key_pair(1024);
+    assert!(key_pair.pub_key.is_null());
+    assert!(key_pair.priv_key.is_null());
+    assert_eq!(cas_error_code(&cas_lib::error::CasError::InvalidParameters), key_pair.error_code);
+}
+
+#[test]
+fn rsa_sign_and_verify_2048_test() {
+    let key_pair = get_key_pair(2048);
+    assert_eq!(0, key_pair.error_code);
+    let data = b"data to sign".to_vec();
+    let signature = rsa_sign_with_key_bytes(key_pair.priv_key, data.as_ptr(), data.len());
+    assert_eq!(0, signature.error_code);
+    let verified = rsa_verify_bytes(key_pair.pub_key, data.as_ptr(), data.len(), signature.signature_raw_ptr, signature.length);
+    assert_eq!(0, verified.error_code);
+    assert!(verified.is_valid);
+    unsafe {
+        drop(CString::from_raw(key_pair.priv_key));
+        drop(CString::from_raw(key_pair.pub_key));
+    }
+}

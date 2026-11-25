@@ -88,3 +88,38 @@ fn bcrypt_verify_test() {
     assert_eq!(true, is_valid.is_valid);
 }
 
+#[test]
+fn bcrypt_72_byte_password_hashes_and_verifies_test() {
+    // 24 three-byte characters: exactly 72 bytes of UTF-8, the bcrypt maximum.
+    let password_cstr = CString::new("€".repeat(24)).unwrap();
+    assert_eq!(72, password_cstr.as_bytes().len());
+    let hashed_password = bcrypt_hash(password_cstr.as_ptr());
+    assert_eq!(0, hashed_password.error_code);
+    let is_valid = bcrypt_verify(password_cstr.as_ptr(), hashed_password.value);
+    assert_eq!(0, is_valid.error_code);
+    assert!(is_valid.is_valid);
+    unsafe { drop(CString::from_raw(hashed_password.value)) };
+}
+
+#[test]
+fn bcrypt_rejects_password_over_72_bytes_test() {
+    let invalid_parameters = cas_error_code(&cas_lib::error::CasError::InvalidParameters);
+    let short_cstr = CString::new("a".repeat(72)).unwrap();
+    let long_cstr = CString::new("a".repeat(73)).unwrap();
+
+    let hashed_password = bcrypt_hash(long_cstr.as_ptr());
+    assert!(hashed_password.value.is_null());
+    assert_eq!(invalid_parameters, hashed_password.error_code);
+
+    let hashed_password = bcrypt_hash_with_parameters(long_cstr.as_ptr(), 4);
+    assert!(hashed_password.value.is_null());
+    assert_eq!(invalid_parameters, hashed_password.error_code);
+
+    // A 73-byte password must not verify against the hash of its first 72 bytes.
+    let short_hash = bcrypt_hash_with_parameters(short_cstr.as_ptr(), 4);
+    assert_eq!(0, short_hash.error_code);
+    let is_valid = bcrypt_verify(long_cstr.as_ptr(), short_hash.value);
+    assert!(!is_valid.is_valid);
+    assert_eq!(invalid_parameters, is_valid.error_code);
+    unsafe { drop(CString::from_raw(short_hash.value)) };
+}
