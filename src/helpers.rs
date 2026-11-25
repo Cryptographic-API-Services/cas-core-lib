@@ -83,6 +83,28 @@ pub(crate) fn export_bytes(bytes: &[u8]) -> *mut c_uchar {
     }
 }
 
+/// Rebuilds an input buffer from a pointer + length pair without panicking.
+///
+/// FFI callers often marshal an empty array (empty AAD, empty plaintext) as a
+/// null pointer, so a null pointer is accepted when `length == 0`. A null
+/// pointer with a non-zero length is reported as `InvalidInput` through the
+/// result's `error_code` rather than panicking across the ABI.
+pub fn bytes_from_ffi(ptr: *const c_uchar, length: usize) -> Result<Vec<u8>, CasError> {
+    if length == 0 {
+        return Ok(Vec::new());
+    }
+    if ptr.is_null() {
+        return Err(CasError::InvalidInput);
+    }
+    Ok(unsafe { std::slice::from_raw_parts(ptr, length) }.to_vec())
+}
+
+// Copies a returned buffer. The original is leaked, like the other inline tests do.
+#[cfg(test)]
+pub fn take_bytes(ptr: *mut c_uchar, length: usize) -> Vec<u8> {
+    unsafe { std::slice::from_raw_parts(ptr, length) }.to_vec()
+}
+
 /// Releases a string returned by this library (`CString::into_raw`). The
 /// string goes back through `ZeroAlloc`, which wipes it. The caller must not
 /// write an extra NUL into it, because the length is recovered with `strlen`.

@@ -3,27 +3,12 @@ use std::ffi::c_uchar;
 use cas_lib::hybrid::{cas_hybrid::CASHybrid, hpke::CASHPKE};
 use types::{HpkeDecrypt, HpkeEncrypt, HpkeKeyPair};
 
+#[cfg(test)]
 use cas_lib::error::CasError;
 
-use crate::helpers::{cas_error_code, export_bytes};
+use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes};
 
 mod types;
-
-/// Rebuilds the optional AAD buffer from a pointer + length pair.
-///
-/// Empty AAD is the common case, and FFI callers often marshal an empty array
-/// as a null pointer, so a null pointer is accepted when `aad_length == 0`.
-/// A null pointer with a non-zero length is reported as `InvalidInput` through
-/// the result's `error_code` rather than panicking across the ABI.
-fn aad_bytes(aad: *const c_uchar, aad_length: usize) -> Result<Vec<u8>, CasError> {
-    if aad_length == 0 {
-        return Ok(Vec::new());
-    }
-    if aad.is_null() {
-        return Err(CasError::InvalidInput);
-    }
-    Ok(unsafe { std::slice::from_raw_parts(aad, aad_length) }.to_vec())
-}
 
 #[no_mangle]
 pub extern "C" fn hpke_generate_keypair() -> HpkeKeyPair {
@@ -53,7 +38,7 @@ pub extern "C" fn hpke_encrypt(
     let plaintext = unsafe { std::slice::from_raw_parts(plaintext, plaintext_length) }.to_vec();
     let public_key = unsafe { std::slice::from_raw_parts(public_key, public_keylength) }.to_vec();
     let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
-    let result = aad_bytes(aad, aad_length)
+    let result = bytes_from_ffi(aad, aad_length)
         .and_then(|aad| <CASHPKE as CASHybrid>::encrypt(plaintext, public_key, info_str, aad));
     match result {
         Ok((encapped_key, ciphertext, tag)) => {
@@ -100,7 +85,7 @@ pub extern "C" fn hpke_decrypt(
     let encapped_key = unsafe { std::slice::from_raw_parts(encapped_key, encapped_key_length) }.to_vec();
     let tag = unsafe { std::slice::from_raw_parts(tag, tag_length)}.to_vec();
     let info_str = unsafe { std::slice::from_raw_parts(info_str, info_str_length) }.to_vec();
-    let result = aad_bytes(aad, aad_length)
+    let result = bytes_from_ffi(aad, aad_length)
         .and_then(|aad| <CASHPKE as CASHybrid>::decrypt(ciphertext, private_key, encapped_key, tag, info_str, aad));
     match result {
         Ok(plaintext) => {
