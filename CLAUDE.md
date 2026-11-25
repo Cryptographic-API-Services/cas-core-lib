@@ -51,6 +51,19 @@ Tests live inline in the same files as `#[test]` functions and typically exercis
 
 PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): summary`, `!` after the type for a breaking change), e.g. `fix(rsa): reject keys under 2048 bits`. PRs are squash-merged, so the title becomes the commit message and the `CHANGELOG.md` line. [`.github/workflows/pr-title.yml`](.github/workflows/pr-title.yml) checks it; allowed types: `feat`, `fix`, `security`, `changed`, `deprecated`, `docs`, `perf`, `refactor`, `test`, `ci`, `build`, `chore`, `revert`.
 
+## C# bindings (csbindgen)
+
+[`build.rs`](build.rs) runs csbindgen over every `.rs` file under `src/` and writes the .NET P/Invoke bindings to `$OUT_DIR/NativeMethods.g.cs` (under `target/<profile>/build/cas_core_lib-*/out/`). A plain build writes nothing outside `target/`.
+
+To regenerate the bindings that cas-dotnet-sdk compiles, set `CAS_DOTNET_BINDINGS_DIR` to its `generated/` directory. A relative path is resolved against this crate's directory:
+
+```bash
+# from the cas-core-lib submodule inside cas-dotnet-sdk
+CAS_DOTNET_BINDINGS_DIR=../cas-dotnet-sdk/generated cargo build --release
+```
+
+Changing the variable re-runs the build script. If you add or rename an FFI function, regenerate the bindings and commit `NativeMethods.g.cs` in cas-dotnet-sdk.
+
 ## Versioning
 
 Versions are bumped by the release PR (see Releases), not by hand: mark FFI-breaking changes with `!` in the PR title. Keep the pinned `cas-lib` dependency version in sync with the behavior the consumer SDKs expect.
@@ -66,7 +79,7 @@ The crate isn't published to crates.io; a release is a `v<version>` tag plus a G
 
 1. The `release-please` job opens or updates a `chore: release <version>` PR that bumps `Cargo.toml` (and `Cargo.lock`) and `.release-please-manifest.json`, and adds a `CHANGELOG.md` entry built from the Conventional Commit titles since the last release. Edit that PR to polish the entry; don't edit `CHANGELOG.md` entries anywhere else, and never bump `Cargo.toml`'s version by hand.
 2. Merging it makes the job push the `v<version>` tag and create a GitHub Release whose body is that entry (job outputs `release_created` / `tag_name`).
-3. Only then does the `build` matrix run, with a read-only token, on `ubuntu-latest` (x86_64 Linux), `windows-latest` (x86_64 Windows) and `macos-latest` (arm64 macOS). Each job checks out the tag, installs the toolchain from `rust-toolchain.toml`, fails if the tag isn't `v<Cargo.toml version>`, runs `cargo test --release --locked` and then `cargo build --release --locked`, and uploads the library plus the `NativeMethods.g.cs` that `build.rs` generated (in `../cas-dotnet-sdk/generated`, next to the checkout).
+3. Only then does the `build` matrix run, with a read-only token, on `ubuntu-latest` (x86_64 Linux), `windows-latest` (x86_64 Windows) and `macos-latest` (arm64 macOS). Each job checks out the tag, installs the toolchain from `rust-toolchain.toml`, fails if the tag isn't `v<Cargo.toml version>`, runs `cargo test --release --locked` and then `cargo build --release --locked`, and uploads the library plus the `NativeMethods.g.cs` that `build.rs` generated (the build sets `CAS_DOTNET_BINDINGS_DIR=bindings`).
 4. The `upload` job runs in the `release` environment with `contents: write` only. It checks that the three `NativeMethods.g.cs` copies are identical (ignoring CRLF), writes `SHA256SUMS`, and attaches `libcas_core_lib.so`, `cas_core_lib.dll`, `libcas_core_lib.dylib`, `NativeMethods.g.cs` and `SHA256SUMS` with `gh release upload`. It never overwrites assets: if it fails halfway, delete the partial assets from the release by hand and rerun the job.
 
 The assets keep the file names cargo produces, which are the names .NET resolves for `[DllImport("cas_core_lib")]`, so cas-dotnet-sdk can vendor them unchanged. They are the same for `crate-type = ["dylib"]` (today) and `cdylib` (#102). When adding a target, add it to the `build` matrix and to the `cp` list in `upload` together; two targets for one OS (e.g. Linux arm64) would need distinct asset names.

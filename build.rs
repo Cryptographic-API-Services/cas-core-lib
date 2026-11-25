@@ -1,5 +1,10 @@
 use std::path::{Path, PathBuf};
 
+/// Directory to copy the generated bindings into (e.g. cas-dotnet-sdk's
+/// `generated/`). Unset by default, so a plain build writes only to OUT_DIR.
+const BINDINGS_DIR_ENV: &str = "CAS_DOTNET_BINDINGS_DIR";
+const BINDINGS_FILE: &str = "NativeMethods.g.cs";
+
 /// Generates the C# P/Invoke bindings consumed by cas-dotnet-sdk straight from
 /// this crate's `extern "C"` surface, using csbindgen (Cysharp).
 ///
@@ -10,6 +15,9 @@ use std::path::{Path, PathBuf};
 ///
 /// Every `.rs` file under `src/` is fed to csbindgen, so the full FFI surface is
 /// covered and new modules are picked up automatically with no build.rs change.
+///
+/// The file is always written to `$OUT_DIR/NativeMethods.g.cs`. When
+/// `CAS_DOTNET_BINDINGS_DIR` is set, it is also copied into that directory.
 fn main() {
     let mut inputs = Vec::new();
     collect_rs_files(Path::new("src"), &mut inputs);
@@ -20,12 +28,13 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=build.rs");
 
-    // Emit into the C# SDK project so the binding is a tracked artifact of the
-    // .NET repo (the project consumes it as source). Anchor on CARGO_MANIFEST_DIR
-    // so the path is correct no matter what working directory cargo is invoked from.
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let out_dir = Path::new(manifest_dir).join("../cas-dotnet-sdk/generated");
-    std::fs::create_dir_all(&out_dir).expect("failed to create generated/ output directory");
+    println!("cargo:rerun-if-env-changed={BINDINGS_DIR_ENV}");
+
+    // Cargo build scripts may only write to OUT_DIR, so that is the default
+    // target. cas-dotnet-sdk sets CAS_DOTNET_BINDINGS_DIR to its `generated/`
+    // directory to get a copy there as well (see CLAUDE.md).
+    let out_dir = PathBuf::from(std::env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"));
+    let generated = out_dir.join(BINDINGS_FILE);
 
     let mut builder = csbindgen::Builder::default();
     for input in &inputs {
@@ -40,8 +49,18 @@ fn main() {
         .csharp_namespace("CasCoreLib")
         .csharp_class_name("NativeMethods")
         .csharp_use_nint_types(true)
-        .generate_csharp_file(out_dir.join("NativeMethods.g.cs"))
+        .generate_csharp_file(&generated)
         .expect("failed to generate C# bindings");
+
+    // Relative paths are resolved against this crate's directory, which is the
+    // build script's working directory.
+    if let Some(dir) = std::env::var_os(BINDINGS_DIR_ENV).filter(|d| !d.is_empty()) {
+        let dir = PathBuf::from(dir);
+        std::fs::create_dir_all(&dir)
+            .unwrap_or_else(|e| panic!("{BINDINGS_DIR_ENV}: create {dir:?}: {e}"));
+        std::fs::copy(&generated, dir.join(BINDINGS_FILE))
+            .unwrap_or_else(|e| panic!("{BINDINGS_DIR_ENV}: copy bindings into {dir:?}: {e}"));
+    }
 }
 
 /// Recursively collects every `.rs` file under `dir`.

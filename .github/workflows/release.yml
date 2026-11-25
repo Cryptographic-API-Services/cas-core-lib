@@ -111,19 +111,21 @@ jobs:
       - name: Test
         run: cargo test --release --locked --verbose
 
+      # build.rs writes the C# bindings to OUT_DIR and also copies them into
+      # CAS_DOTNET_BINDINGS_DIR when it is set (#96). A relative path is
+      # resolved against the crate directory.
       - name: Build
+        env:
+          CAS_DOTNET_BINDINGS_DIR: bindings
         run: cargo build --release --locked --verbose
 
-      # build.rs writes the C# bindings to ../cas-dotnet-sdk/generated (relative
-      # to the crate), i.e. next to the checkout. Stage everything inside the
-      # workspace, since upload-artifact doesn't take paths outside it.
       - name: Stage the release files
         env:
           LIBRARY: ${{ matrix.library }}
         run: |
           mkdir dist
           cp "target/release/${LIBRARY}" dist/
-          cp ../cas-dotnet-sdk/generated/NativeMethods.g.cs dist/
+          cp bindings/NativeMethods.g.cs dist/
           ls -la dist
 
       - name: Upload artifact
