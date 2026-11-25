@@ -36,9 +36,9 @@ pub extern "C" fn ml_kem_1024_encapsulate_shared_secret(
             result
         }
         Err(e) => MlKemEncapsulateResult {
-            ciphertext_ptr: std::ptr::null(),
+            ciphertext_ptr: std::ptr::null_mut(),
             ciphertext_length: 0,
-            shared_secret_ptr: std::ptr::null(),
+            shared_secret_ptr: std::ptr::null_mut(),
             shared_secret_length: 0,
             error_code: cas_error_code(&e),
         },
@@ -72,7 +72,7 @@ pub extern "C" fn ml_kem_1024_decapsulate_shared_secret(
             result
         }
         Err(e) => MlKemDecapsulateResult {
-            shared_secret_ptr: std::ptr::null(),
+            shared_secret_ptr: std::ptr::null_mut(),
             shared_secret_length: 0,
             error_code: cas_error_code(&e),
         },

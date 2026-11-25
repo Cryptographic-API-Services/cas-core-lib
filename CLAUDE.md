@@ -27,25 +27,53 @@ Every public function follows one rigid pattern. When adding or editing a functi
 
 - **`#[no_mangle] pub extern "C"`** on every exported function so the symbol is callable across the FFI.
 - **Pointer + length pairs.** Byte buffers cross the boundary as a raw pointer plus a separate `usize` length argument (e.g. `key: *const c_uchar, key_length: usize`). There are no Rust slices or `Vec`s in signatures.
-- **Returning data via `#[repr(C)]` structs.** Functions that return buffers return a small `#[repr(C)]` struct (defined in the module's `types.rs`) holding a `*mut c_uchar` and a `usize length`. Strings (e.g. PEM keys) are returned as `*mut c_char` via `CString::into_raw`.
+- **Returning data via `#[repr(C)]` structs.** Functions that return buffers return a small `#[repr(C)]` struct (defined in the module's `types.rs`) holding a `*mut c_uchar` (or `*mut u8`; owned fields are always `*mut`, never `*const`) and a `usize length`, plus a doc comment saying which fields the caller frees and with what (csbindgen copies it into the C# bindings). Strings (e.g. PEM keys) are returned as `*mut c_char` via `CString::into_raw`.
 - **Handing buffers to the caller.** Put `export_bytes(&vec)` (from [`src/helpers.rs`](src/helpers.rs)) in the result struct's pointer field and `vec.len()` in its length field, and let the `Vec` drop normally. `export_bytes` copies the bytes into a Rust-allocator buffer with a hidden length header. Never return `vec.as_mut_ptr()` + `std::mem::forget(vec)` or a `libc::malloc` pointer: `free_bytes` cannot free those.
-- **Freeing.** [`src/helpers.rs`](src/helpers.rs) exports `free_cstring` and `free_bytes` — the only functions consumers should call to release memory this crate handed out. Both release through the Rust global allocator, so `ZeroAlloc` wipes the memory. `free_bytes(ptr)` reads the length from the header `export_bytes` wrote.
-- **Decoding inputs.** Incoming pointers are rebuilt with `std::slice::from_raw_parts(ptr, len).to_vec()` for bytes, or `CStr::from_ptr(...).to_str().unwrap().to_string()` for strings. Null checks are done with `assert!(!ptr.is_null())`.
+- **Freeing.** [`src/helpers.rs`](src/helpers.rs) exports `free_cstring` and `free_bytes` — together with the `free_<struct>` functions for multi-buffer results (see Ownership of returned memory), the only functions consumers should call to release memory this crate handed out. Both release through the Rust global allocator, so `ZeroAlloc` wipes the memory. `free_bytes(ptr)` reads the length from the header `export_bytes` wrote.
+- **Decoding inputs.** Incoming pointers are rebuilt with `std::slice::from_raw_parts(ptr, len).to_vec()` for bytes, or `CStr::from_ptr(...).to_str().unwrap().to_string()` for strings. Most modules null-check with `assert!(!ptr.is_null())`; `aes`, `ascon_aead`, `hpke`, `x25519` and `zstd` don't check yet (#86).
 - **Delegation.** The body should immediately delegate to a `cas-lib` trait implementation (e.g. `<CASAES256 as CASAES256Encryption>::encrypt_plaintext(...)`) and only handle marshalling around it. Keep crypto decisions in `cas-lib`, not here.
 
 ### Security-relevant global
 
 [`src/lib.rs`](src/lib.rs) installs a custom `#[global_allocator]` (`zeroizing_alloc::ZeroAlloc`) that zeroes memory on deallocation. This is intentional for a crypto library — do not remove or replace it.
 
+### Ownership of returned memory
+
+This is the contract with every consumer SDK. Each result struct's rustdoc repeats it for that struct.
+
+- **The caller owns every pointer this crate returns**, whether it is a struct field or a bare return value, and must release each one exactly once. Freeing twice is a double free, and the ABI cannot detect it.
+- **Byte buffers** (`*mut c_uchar` / `*mut u8` fields, with a `*_length` beside them) are released with `free_bytes(ptr)`. The length field is for reading the bytes; `free_bytes` doesn't take it.
+- **Strings** (`*mut c_char`: `CasStringResult::value` and the PEM keys in `RsaKeyPair`) are released with `free_cstring(ptr)`. Never mix the two up: `free_cstring` on a byte buffer runs `strlen` over non-string memory, and `free_bytes` on a string reads a length header that isn't there.
+- **Multi-buffer results** have a `free_<struct>(*mut Struct)` that frees every field, then sets the pointers to null and the lengths to 0, so calling it twice on the same struct is harmless. Use it rather than freeing the fields one by one: a missed field leaks key material that `ZeroAlloc` never wipes.
+
+  | Result struct | Returned by | Free with |
+  |---|---|---|
+  | `x25519SecretPublicKeyResult` | `generate_secret_and_public_key` | `free_x25519_secret_public_key_result` |
+  | `Ed25519KeyPairBytesResult` | `get_ed25519_key_pair_bytes` | `free_ed25519_key_pair_bytes_result` |
+  | `Ed25519ByteSignatureResult` | `sign_with_key_pair_bytes` | `free_ed25519_byte_signature_result` |
+  | `HpkeKeyPair` | `hpke_generate_keypair` | `free_hpke_key_pair` |
+  | `HpkeEncrypt` | `hpke_encrypt` | `free_hpke_encrypt` |
+  | `RsaKeyPair` (two strings) | `get_key_pair` | `free_rsa_key_pair` |
+  | `SlhDsaKeyPairResult` | `slh_dsa_generate_signing_and_verification_key` | `free_slh_dsa_key_pair_result` |
+  | `MlDsaKeyPairResult` | `ml_dsa_generate_signing_and_verification_key` | `free_ml_dsa_key_pair_result` |
+  | `MlKemKeyPairResult` | `ml_kem_1024_generate_key_pair` | `free_ml_kem_key_pair_result` |
+  | `MlKemEncapsulateResult` | `ml_kem_1024_encapsulate_shared_secret` | `free_ml_kem_encapsulate_result` |
+
+  Every other result struct holds one buffer (`free_bytes`) or one string (`free_cstring`). `CasVerifyResult` and the `bool` verify functions hand out no memory.
+- **On failure** (`error_code != 0`) the pointer fields are null. `free_bytes`, `free_cstring` and every `free_<struct>` ignore null, so a caller can free unconditionally.
+- **Wipe your own copies.** `ZeroAlloc` only wipes memory owned by the Rust allocator: the inputs this crate copies (`.to_vec()`) and the buffers it returns once they are freed. It can't reach the caller's side. In .NET, secrets passed in or copied out (`byte[]` keys, passwords, plaintext, shared secrets) stay in the managed heap until the GC reuses that memory, and a `string` can never be wiped. SDK code should keep secrets in `byte[]` / `Span<byte>` rather than `string`, clear them with `CryptographicOperations.ZeroMemory` once used, pin them (`fixed`, or a pinned array) while they cross the FFI so the GC can't leave moved copies behind, and copy a returned buffer out and free it straight away (in a `finally`, or a `SafeHandle`).
+
+When you add a result struct, give it this rustdoc, and add a `free_<struct>` if it holds more than one buffer.
+
 ### Module layout
 
 [`src/lib.rs`](src/lib.rs) is just the module tree. Each cryptographic primitive is its own module, and larger ones split FFI functions from their `#[repr(C)]` structs:
 
-- Flat modules: `aes`, `ed25519`, `x25519`, `ascon_aead`, `zstd`, `helpers`
-- `mod.rs` + `types.rs` pairs: `rsa`, `sha`, `hmac`, `hpke`, `blake2`
-- Grouped: `password_hashers/` (argon2, scrypt, bcrypt) and `pqc/` (post-quantum, e.g. SLH-DSA)
+- Flat modules: `aes`, `ed25519`, `x25519`, `ascon_aead`, `helpers`
+- `mod.rs` + `types.rs` pairs: `rsa`, `sha`, `hmac`, `hpke`, `blake2`; `zstd/` is a lone `mod.rs`
+- Grouped, with a shared `types.rs`: `password_hashers/` (argon2, scrypt, bcrypt) and `pqc/` (post-quantum: SLH-DSA, ML-DSA, ML-KEM)
 
-Tests live inline in the same files as `#[test]` functions and typically exercise a full round-trip (e.g. generate key -> encrypt -> decrypt -> assert equality), calling the FFI functions directly.
+Tests live inline in the same files as `#[test]` functions and typically exercise a full round-trip (e.g. generate key -> encrypt -> decrypt -> assert equality), calling the FFI functions directly. Tests should free what they get back. [`src/free_tests.rs`](src/free_tests.rs) frees every single-buffer and string result, and each `free_<struct>` has a test next to it.
 
 ## PR titles
 

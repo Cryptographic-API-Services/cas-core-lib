@@ -1,8 +1,13 @@
 use cas_lib::key_exchange::{cas_key_exchange::CASKeyExchange, x25519::X25519};
 use std::ffi::c_uchar;
 
-use crate::helpers::{cas_error_code, export_bytes};
+use crate::helpers::{cas_error_code, export_bytes, free_bytes_field};
 
+/// X25519 key pair from `generate_secret_and_public_key`.
+///
+/// The caller owns both buffers and must free them: pass the struct to
+/// [`free_x25519_secret_public_key_result`], or call `free_bytes` once on each
+/// pointer. `secret_key` is secret.
 #[repr(C)]
 pub struct x25519SecretPublicKeyResult {
     pub secret_key: *mut c_uchar,
@@ -11,6 +16,10 @@ pub struct x25519SecretPublicKeyResult {
     pub public_key_length: usize,
 }
 
+/// X25519 shared secret from `diffie_hellman`.
+///
+/// The caller owns `shared_secret` (secret) and frees it with `free_bytes`. It
+/// is null when `error_code` is non-zero.
 #[repr(C)]
 pub struct x25519SharedSecretResult {
     pub shared_secret: *mut c_uchar,
@@ -96,4 +105,34 @@ pub extern "C" fn diffie_hellman(
             error_code: cas_error_code(&e),
         },
     }
+}
+
+/// Frees both buffers of an [`x25519SecretPublicKeyResult`] and nulls its
+/// fields, so a second call is harmless. A null `result` is ignored.
+#[no_mangle]
+pub extern "C" fn free_x25519_secret_public_key_result(result: *mut x25519SecretPublicKeyResult) {
+    let Some(result) = (unsafe { result.as_mut() }) else { return };
+    free_bytes_field(&mut result.secret_key, &mut result.secret_key_length);
+    free_bytes_field(&mut result.public_key, &mut result.public_key_length);
+}
+
+#[test]
+fn free_x25519_results_test() {
+    let mut alice = generate_secret_and_public_key();
+    let mut bob = generate_secret_and_public_key();
+    let shared_secret = diffie_hellman(
+        alice.secret_key,
+        alice.secret_key_length,
+        bob.public_key,
+        bob.public_key_length,
+    );
+    assert_eq!(0, shared_secret.error_code);
+    crate::helpers::free_bytes(shared_secret.shared_secret);
+
+    free_x25519_secret_public_key_result(&mut alice);
+    assert!(alice.secret_key.is_null() && alice.public_key.is_null());
+    assert_eq!(0, alice.secret_key_length + alice.public_key_length);
+    free_x25519_secret_public_key_result(&mut alice);
+    free_x25519_secret_public_key_result(&mut bob);
+    free_x25519_secret_public_key_result(std::ptr::null_mut());
 }

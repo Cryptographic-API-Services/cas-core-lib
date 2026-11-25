@@ -108,6 +108,10 @@ pub fn take_bytes(ptr: *mut c_uchar, length: usize) -> Vec<u8> {
 /// Releases a string returned by this library (`CString::into_raw`). The
 /// string goes back through `ZeroAlloc`, which wipes it. The caller must not
 /// write an extra NUL into it, because the length is recovered with `strlen`.
+///
+/// Only for `*mut c_char` fields (`CasStringResult::value`, the PEM strings in
+/// `RsaKeyPair`). Never pass a byte buffer: use [`free_bytes`] for those. Each
+/// string must be freed exactly once. Null is ignored.
 #[no_mangle]
 pub extern "C" fn free_cstring(s: *mut c_char) {
     unsafe {
@@ -134,6 +138,22 @@ pub extern "C" fn free_bytes(ptr: *mut c_uchar) {
         let length = (base as *const usize).read();
         dealloc(base, exported_bytes_layout(length));
     }
+}
+
+/// Frees one buffer field of a result struct with [`free_bytes`], then sets the
+/// pointer to null and the length to 0. The `free_<struct>` functions use it, so
+/// calling one of them twice on the same struct is harmless.
+pub(crate) fn free_bytes_field(ptr: &mut *mut c_uchar, length: &mut usize) {
+    free_bytes(*ptr);
+    *ptr = std::ptr::null_mut();
+    *length = 0;
+}
+
+/// Frees one string field of a result struct with [`free_cstring`], then sets
+/// the pointer to null.
+pub(crate) fn free_cstring_field(ptr: &mut *mut c_char) {
+    free_cstring(*ptr);
+    *ptr = std::ptr::null_mut();
 }
 
 #[test]
@@ -173,8 +193,8 @@ fn free_bytes_releases_ffi_results_test() {
     free_bytes(x25519_keys.public_key);
 
     let ml_kem_keys = crate::pqc::ml_kem::ml_kem_1024_generate_key_pair();
-    free_bytes(ml_kem_keys.secret_key_ptr as *mut c_uchar);
-    free_bytes(ml_kem_keys.public_key_ptr as *mut c_uchar);
+    free_bytes(ml_kem_keys.secret_key_ptr);
+    free_bytes(ml_kem_keys.public_key_ptr);
 
     let password = CString::new("DoNotUseThisPassword").unwrap();
     let hash = crate::password_hashers::argon2::argon2_hash_password_parameters(1024, 2, 1, password.as_ptr());

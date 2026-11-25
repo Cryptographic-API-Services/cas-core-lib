@@ -6,18 +6,29 @@ use crate::{helpers::{bytes_from_ffi, cas_error_code, export_bytes}, x25519};
 #[cfg(test)]
 use crate::helpers::take_bytes;
 
+/// AES-GCM nonce from `aes_nonce`.
+///
+/// The caller owns `nonce` and frees it once with `free_bytes`.
 #[repr(C)]
 pub struct AesNonce {
     pub nonce: *mut c_uchar,
     pub length: usize
 }
 
+/// AES key from `aes_128_key` / `aes_256_key`.
+///
+/// The caller owns `key` (secret) and frees it once with `free_bytes`.
 #[repr(C)]
 pub struct AesKeyResult {
     pub key: *mut c_uchar,
     pub length: usize
 }
 
+/// AES-GCM ciphertext from `aes_128_encrypt_bytes_with_key` /
+/// `aes_256_encrypt_bytes_with_key`.
+///
+/// The caller owns `ciphertext` and frees it once with `free_bytes`. It is
+/// null when `error_code` is non-zero.
 #[repr(C)]
 pub struct AesBytesEncrypt {
     pub ciphertext: *mut c_uchar,
@@ -25,6 +36,11 @@ pub struct AesBytesEncrypt {
     pub error_code: i32,
 }
 
+/// AES-GCM plaintext from `aes_128_decrypt_bytes_with_key` /
+/// `aes_256_decrypt_bytes_with_key`.
+///
+/// The caller owns `plaintext` and frees it once with `free_bytes`. It is
+/// null when `error_code` is non-zero.
 #[repr(C)]
 pub struct AesBytesDecrypt {
     pub plaintext: *mut c_uchar,
@@ -32,6 +48,11 @@ pub struct AesBytesDecrypt {
     pub error_code: i32,
 }
 
+/// AES key derived by `aes_128_key_from_x25519_diffie_hellman_shared_secret`
+/// / `aes_256_key_from_x25519_diffie_hellman_shared_secret`.
+///
+/// The caller owns `aes_key_ptr` (secret) and frees it once with `free_bytes`.
+/// It is null when `error_code` is non-zero.
 #[repr(C)]
 pub struct AesNonceAndKeyFromX25519DiffieHellman {
     pub aes_key_ptr: *mut c_uchar,

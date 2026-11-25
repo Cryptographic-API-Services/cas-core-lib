@@ -41,7 +41,7 @@ pub extern "C" fn ml_dsa_sign_message(
             result
         }
         Err(e) => MlDsaSignature {
-            signature_ptr: std::ptr::null(),
+            signature_ptr: std::ptr::null_mut(),
             signature_length: 0,
             error_code: cas_error_code(&e),
         },
