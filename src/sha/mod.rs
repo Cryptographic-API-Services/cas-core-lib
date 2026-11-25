@@ -34,13 +34,7 @@ mod types;
 /// `slice::from_raw_parts` must never be called with a null pointer (even for
 /// length 0), hence the early return.
 pub(crate) fn input_bytes(ptr: *const c_uchar, len: usize) -> Option<Vec<u8>> {
-    if len == 0 {
-        return Some(Vec::new());
-    }
-    if ptr.is_null() {
-        return None;
-    }
-    Some(unsafe { std::slice::from_raw_parts(ptr, len) }.to_vec())
+    crate::helpers::bytes_from_ffi(ptr, len).ok()
 }
 
 /// Runs a cas-lib verify on a digest and the data it should be the hash of,
@@ -58,11 +52,16 @@ pub(crate) fn verify_digest(
 
 fn into_result(result: Option<Vec<u8>>) -> SHAHashByteResult {
     let Some(result) = result else {
-        return SHAHashByteResult { result_bytes_ptr: std::ptr::null_mut(), length: 0 };
+        return SHAHashByteResult {
+            result_bytes_ptr: std::ptr::null_mut(),
+            length: 0,
+            error_code: cas_error_code(&CasError::InvalidInput),
+        };
     };
     let return_result = SHAHashByteResult {
         result_bytes_ptr: export_bytes(&result),
         length: result.len(),
+        error_code: 0,
     };
     return_result
 }

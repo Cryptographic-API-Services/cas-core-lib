@@ -1,6 +1,6 @@
 use cas_lib::pqc::ml_kem::{ml_kem_1024_decapsulate, ml_kem_1024_encapsulate, ml_kem_1024_generate};
 use crate::pqc::types::{MlKemDecapsulateResult, MlKemEncapsulateResult, MlKemKeyPairResult};
-use crate::helpers::{cas_error_code, export_bytes};
+use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes};
 
 #[no_mangle]
 pub extern "C" fn ml_kem_1024_generate_key_pair() -> MlKemKeyPairResult {
@@ -10,6 +10,7 @@ pub extern "C" fn ml_kem_1024_generate_key_pair() -> MlKemKeyPairResult {
         secret_key_length: key_pair.secret_key.len(),
         public_key_ptr: export_bytes(&key_pair.public_key),
         public_key_length: key_pair.public_key.len(),
+        error_code: 0,
     };
     result
 }
@@ -19,12 +20,7 @@ pub extern "C" fn ml_kem_1024_encapsulate_shared_secret(
     public_key: *const u8,
     public_key_length: usize,
 ) -> MlKemEncapsulateResult {
-    let public_key_slice = unsafe {
-        assert!(!public_key.is_null());
-        std::slice::from_raw_parts(public_key, public_key_length)
-    }
-    .to_vec();
-    match ml_kem_1024_encapsulate(public_key_slice) {
+    match bytes_from_ffi(public_key, public_key_length).and_then(ml_kem_1024_encapsulate) {
         Ok(encap) => {
             let result = MlKemEncapsulateResult {
                 ciphertext_ptr: export_bytes(&encap.ciphertext),
@@ -52,17 +48,11 @@ pub extern "C" fn ml_kem_1024_decapsulate_shared_secret(
     ciphertext: *const u8,
     ciphertext_length: usize,
 ) -> MlKemDecapsulateResult {
-    let secret_key_slice = unsafe {
-        assert!(!secret_key.is_null());
-        std::slice::from_raw_parts(secret_key, secret_key_length)
-    }
-    .to_vec();
-    let ciphertext_slice = unsafe {
-        assert!(!ciphertext.is_null());
-        std::slice::from_raw_parts(ciphertext, ciphertext_length)
-    }
-    .to_vec();
-    match ml_kem_1024_decapsulate(secret_key_slice, ciphertext_slice) {
+    match (|| {
+        let secret_key_slice = bytes_from_ffi(secret_key, secret_key_length)?;
+        let ciphertext_slice = bytes_from_ffi(ciphertext, ciphertext_length)?;
+        ml_kem_1024_decapsulate(secret_key_slice, ciphertext_slice)
+    })() {
         Ok(shared_secret) => {
             let result = MlKemDecapsulateResult {
                 shared_secret_ptr: export_bytes(&shared_secret),

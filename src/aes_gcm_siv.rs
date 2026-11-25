@@ -10,13 +10,17 @@ use crate::helpers::take_bytes;
 #[repr(C)]
 pub struct AesGcmSivNonce {
     pub nonce: *mut c_uchar,
-    pub length: usize
+    pub length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 #[repr(C)]
 pub struct AesGcmSivKey {
     pub key: *mut c_uchar,
-    pub length: usize
+    pub length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 #[repr(C)]
@@ -75,7 +79,8 @@ pub extern "C" fn aes_gcm_siv_nonce() -> AesGcmSivNonce {
     let random_bytes = <CASAES256SIV as CASAES256SIVEncryption>::generate_nonce();
     let result = AesGcmSivNonce {
         nonce: export_bytes(&random_bytes),
-        length: random_bytes.len()
+        length: random_bytes.len(),
+        error_code: 0,
     };
     result
 }
@@ -85,7 +90,8 @@ pub extern "C" fn aes_128_gcm_siv_key() -> AesGcmSivKey {
     let key = <CASAES128SIV as CASAES128SIVEncryption>::generate_key();
     let result = AesGcmSivKey {
         key: export_bytes(&key),
-        length: key.len()
+        length: key.len(),
+        error_code: 0,
     };
     result
 }
@@ -95,7 +101,8 @@ pub extern "C" fn aes_256_gcm_siv_key() -> AesGcmSivKey {
     let key = <CASAES256SIV as CASAES256SIVEncryption>::generate_key();
     let result = AesGcmSivKey {
         key: export_bytes(&key),
-        length: key.len()
+        length: key.len(),
+        error_code: 0,
     };
     result
 }

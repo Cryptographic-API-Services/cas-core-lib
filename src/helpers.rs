@@ -90,11 +90,13 @@ pub(crate) fn export_bytes(bytes: &[u8]) -> *mut c_uchar {
 /// pointer with a non-zero length is reported as `InvalidInput` through the
 /// result's `error_code` rather than panicking across the ABI.
 pub fn bytes_from_ffi(ptr: *const c_uchar, length: usize) -> Result<Vec<u8>, CasError> {
+    // `from_raw_parts` is immediate undefined behavior when `length` exceeds
+    // `isize::MAX`, and when `ptr` is null for any length including zero.
+    if length > isize::MAX as usize || (ptr.is_null() && length != 0) {
+        return Err(CasError::InvalidInput);
+    }
     if length == 0 {
         return Ok(Vec::new());
-    }
-    if ptr.is_null() {
-        return Err(CasError::InvalidInput);
     }
     Ok(unsafe { std::slice::from_raw_parts(ptr, length) }.to_vec())
 }
@@ -208,6 +210,18 @@ fn export_bytes_round_trip_test() {
         assert_eq!(header, length);
         free_bytes(ptr);
     }
+}
+
+#[test]
+fn bytes_from_ffi_rejects_null_and_oversized_length_test() {
+    let invalid = cas_error_code(&CasError::InvalidInput);
+    assert!(bytes_from_ffi(std::ptr::null(), 0).unwrap().is_empty());
+    assert_eq!(invalid, cas_error_code(&bytes_from_ffi(std::ptr::null(), 4).unwrap_err()));
+    let dummy = [1u8];
+    assert_eq!(
+        invalid,
+        cas_error_code(&bytes_from_ffi(dummy.as_ptr(), (isize::MAX as usize).saturating_add(1)).unwrap_err())
+    );
 }
 
 #[test]

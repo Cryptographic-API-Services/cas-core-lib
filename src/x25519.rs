@@ -1,7 +1,7 @@
 use cas_lib::key_exchange::{cas_key_exchange::CASKeyExchange, x25519::X25519};
 use std::ffi::c_uchar;
 
-use crate::helpers::{cas_error_code, export_bytes, free_bytes_field};
+use crate::helpers::{bytes_from_ffi, cas_error_code, export_bytes, free_bytes_field};
 
 /// X25519 key pair from `generate_secret_and_public_key`.
 ///
@@ -14,6 +14,9 @@ pub struct x25519SecretPublicKeyResult {
     pub secret_key_length: usize,
     pub public_key: *mut c_uchar,
     pub public_key_length: usize,
+    /// `0` on success. Generation takes no caller input; a non-zero code means it
+    /// failed and both pointers are null.
+    pub error_code: i32,
 }
 
 /// X25519 shared secret from `diffie_hellman`.
@@ -37,6 +40,7 @@ pub extern "C" fn generate_secret_and_public_key() -> x25519SecretPublicKeyResul
         secret_key_length: secret_key.len(),
         public_key: export_bytes(&public_key),
         public_key_length: public_key.len(),
+        error_code: 0,
     };
     result
 }
@@ -85,12 +89,11 @@ pub extern "C" fn diffie_hellman(
     other_user_public_key: *const c_uchar,
     other_user_public_key_length: usize,
 ) -> x25519SharedSecretResult {
-    let secret_key_slice =
-        unsafe { std::slice::from_raw_parts(secret_key, secret_key_length) }.to_vec();
-    let other_user_public_key =
-        unsafe { std::slice::from_raw_parts(other_user_public_key, other_user_public_key_length) }
-            .to_vec();
-    match <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key) {
+    match (|| {
+        let secret_key_slice = bytes_from_ffi(secret_key, secret_key_length)?;
+        let other_user_public_key = bytes_from_ffi(other_user_public_key, other_user_public_key_length)?;
+        <X25519 as CASKeyExchange>::diffie_hellman(secret_key_slice, other_user_public_key)
+    })() {
         Ok(result) => {
             let return_result = x25519SharedSecretResult {
                 shared_secret: export_bytes(&result),

@@ -20,11 +20,16 @@ use crate::sha::{input_bytes, verify_digest};
 
 fn into_result(result: Option<Vec<u8>>) -> Blake2HashByteResult {
     let Some(result) = result else {
-        return Blake2HashByteResult { result_bytes_ptr: std::ptr::null_mut(), length: 0 };
+        return Blake2HashByteResult {
+            result_bytes_ptr: std::ptr::null_mut(),
+            length: 0,
+            error_code: crate::helpers::cas_error_code(&cas_lib::error::CasError::InvalidInput),
+        };
     };
     let return_result = Blake2HashByteResult {
         result_bytes_ptr: export_bytes(&result),
         length: result.len(),
+        error_code: 0,
     };
     return_result
 }

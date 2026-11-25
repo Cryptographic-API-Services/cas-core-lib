@@ -36,7 +36,9 @@ pub struct Ascon128DecryptResult {
 #[repr(C)]
 pub struct Ascon128Key {
     key: *mut c_uchar,
-    length: usize
+    length: usize,
+    /// `0` on success. Generation takes no caller input.
+    error_code: i32,
 }
 
 /// Ascon-128 nonce from `ascon_128_nonce`.
@@ -45,7 +47,9 @@ pub struct Ascon128Key {
 #[repr(C)]
 pub struct Ascon128Nonce {
     nonce: *mut c_uchar,
-    length: usize
+    length: usize,
+    /// `0` on success. Generation takes no caller input.
+    error_code: i32,
 }
 
 #[no_mangle]
@@ -53,7 +57,8 @@ pub extern "C" fn ascon_128_key() -> Ascon128Key {
     let key = <AsconAead as CASAsconAead>::generate_key();
     let result = Ascon128Key {
         key: export_bytes(&key),
-        length: key.len()
+        length: key.len(),
+        error_code: 0,
     };
     result
 }
@@ -65,7 +70,8 @@ pub extern "C" fn ascon_128_nonce() -> Ascon128Nonce {
     let nonce = <AsconAead as CASAsconAead>::generate_nonce();
     let result = Ascon128Nonce {
         nonce: export_bytes(&nonce),
-        length: nonce.len()
+        length: nonce.len(),
+        error_code: 0,
     };
     result
 }
@@ -80,10 +86,12 @@ pub extern "C" fn ascon_128_encrypt(
     to_encrypt: *const c_uchar,
     to_encrypt_length: usize,
 ) -> Ascon128EncryptResult {
-    let nonce_key = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) }.to_vec();
-    let key = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
-    let to_encrypt = unsafe { std::slice::from_raw_parts(to_encrypt, to_encrypt_length) }.to_vec();
-    match <AsconAead as CASAsconAead>::encrypt(key, nonce_key, to_encrypt) {
+    match (|| {
+        let nonce_key = bytes_from_ffi(nonce_key, nonce_key_length)?;
+        let key = bytes_from_ffi(key, key_length)?;
+        let to_encrypt = bytes_from_ffi(to_encrypt, to_encrypt_length)?;
+        <AsconAead as CASAsconAead>::encrypt(key, nonce_key, to_encrypt)
+    })() {
         Ok(ciphertext) => {
             let result = Ascon128EncryptResult {
                 ciphertext: export_bytes(&ciphertext),
@@ -112,10 +120,12 @@ pub extern "C" fn ascon_128_decrypt(
     to_decrypt: *const c_uchar,
     to_decrypt_length: usize,
 ) -> Ascon128DecryptResult {
-    let nonce_key = unsafe { std::slice::from_raw_parts(nonce_key, nonce_key_length) }.to_vec();
-    let key = unsafe { std::slice::from_raw_parts(key, key_length) }.to_vec();
-    let to_decrypt = unsafe { std::slice::from_raw_parts(to_decrypt, to_decrypt_length) }.to_vec();
-    match <AsconAead as CASAsconAead>::decrypt(key, nonce_key, to_decrypt) {
+    match (|| {
+        let nonce_key = bytes_from_ffi(nonce_key, nonce_key_length)?;
+        let key = bytes_from_ffi(key, key_length)?;
+        let to_decrypt = bytes_from_ffi(to_decrypt, to_decrypt_length)?;
+        <AsconAead as CASAsconAead>::decrypt(key, nonce_key, to_decrypt)
+    })() {
         Ok(plaintext) => {
             let result = Ascon128DecryptResult {
                 plaintext: export_bytes(&plaintext),

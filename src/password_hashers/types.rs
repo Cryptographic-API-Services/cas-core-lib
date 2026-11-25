@@ -18,6 +18,8 @@ pub struct Argon2KDFAes128 {
 pub struct Argon2Salt {
     pub salt: *mut c_uchar,
     pub length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 /// A key from `argon2_derive_aes_128_key_with_salt` / `argon2_derive_aes_256_key_with_salt`.

@@ -10,13 +10,17 @@ use crate::helpers::take_bytes;
 #[repr(C)]
 pub struct ChaCha20Poly1305Nonce {
     pub nonce: *mut c_uchar,
-    pub length: usize
+    pub length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 #[repr(C)]
 pub struct ChaCha20Poly1305Key {
     pub key: *mut c_uchar,
-    pub length: usize
+    pub length: usize,
+    /// `0` on success. Generation takes no caller input.
+    pub error_code: i32,
 }
 
 #[repr(C)]
@@ -74,7 +78,8 @@ pub extern "C" fn chacha20_poly1305_key() -> ChaCha20Poly1305Key {
     let key = <CASChacha20Poly1305 as Chacha20Poly1305Encryption>::generate_key();
     let result = ChaCha20Poly1305Key {
         key: export_bytes(&key),
-        length: key.len()
+        length: key.len(),
+        error_code: 0,
     };
     result
 }
@@ -85,7 +90,8 @@ pub extern "C" fn chacha20_poly1305_nonce() -> ChaCha20Poly1305Nonce {
     let nonce = <CASChacha20Poly1305 as Chacha20Poly1305Encryption>::generate_nonce();
     let result = ChaCha20Poly1305Nonce {
         nonce: export_bytes(&nonce),
-        length: nonce.len()
+        length: nonce.len(),
+        error_code: 0,
     };
     result
 }
