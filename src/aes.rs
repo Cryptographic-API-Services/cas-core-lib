@@ -60,15 +60,27 @@ pub struct AesNonceAndKeyFromX25519DiffieHellman {
     pub error_code: i32,
 }
 
+/// Derives an AES-256-GCM key from an X25519 shared secret and both parties'
+/// public keys (HKDF-SHA256, bound to the cipher and to both public keys).
+/// The public keys can be passed in either order, so both peers get the same
+/// key. Returns `InvalidKey` (1) for a wrong-length or all-zero shared secret
+/// or a wrong-length public key.
 #[no_mangle]
 pub extern "C" fn aes_256_key_from_x25519_diffie_hellman_shared_secret(
     shared_secret: *const c_uchar,
     shared_secret_length: usize,
+    public_key_a: *const c_uchar,
+    public_key_a_length: usize,
+    public_key_b: *const c_uchar,
+    public_key_b_length: usize,
 ) -> AesNonceAndKeyFromX25519DiffieHellman {
     let shared_secret_slice: Vec<u8> =
         unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) }.to_vec();
-
-    match <CASAES256 as CASAES256Encryption>::key_from_vec(shared_secret_slice) {
+    let public_key_a_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(public_key_a, public_key_a_length) }.to_vec();
+    let public_key_b_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(public_key_b, public_key_b_length) }.to_vec();
+    match <CASAES256 as CASAES256Encryption>::key_from_x25519_shared_secret(shared_secret_slice, public_key_a_slice, public_key_b_slice) {
         Ok(aes_key) => {
             let result = AesNonceAndKeyFromX25519DiffieHellman {
                 aes_key_ptr: export_bytes(&aes_key),
@@ -85,57 +97,95 @@ pub extern "C" fn aes_256_key_from_x25519_diffie_hellman_shared_secret(
     }
 }
 
+/// Derives an AES-128-GCM key the same way as
+/// [`aes_256_key_from_x25519_diffie_hellman_shared_secret`], with a
+/// per-cipher label, so the two never give related keys.
+#[no_mangle]
+pub extern "C" fn aes_128_key_from_x25519_diffie_hellman_shared_secret(
+    shared_secret: *const c_uchar,
+    shared_secret_length: usize,
+    public_key_a: *const c_uchar,
+    public_key_a_length: usize,
+    public_key_b: *const c_uchar,
+    public_key_b_length: usize,
+) -> AesNonceAndKeyFromX25519DiffieHellman {
+    let shared_secret_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) }.to_vec();
+    let public_key_a_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(public_key_a, public_key_a_length) }.to_vec();
+    let public_key_b_slice: Vec<u8> =
+        unsafe { std::slice::from_raw_parts(public_key_b, public_key_b_length) }.to_vec();
+    match <CASAES128 as CASAES128Encryption>::key_from_x25519_shared_secret(shared_secret_slice, public_key_a_slice, public_key_b_slice) {
+        Ok(aes_key) => {
+            let result = AesNonceAndKeyFromX25519DiffieHellman {
+                aes_key_ptr: export_bytes(&aes_key),
+                aes_key_ptr_length: aes_key.len(),
+                error_code: 0,
+            };
+            result
+        }
+        Err(e) => AesNonceAndKeyFromX25519DiffieHellman {
+            aes_key_ptr: std::ptr::null_mut(),
+            aes_key_ptr_length: 0,
+            error_code: cas_error_code(&e),
+        },
+    }
+}
 
+#[cfg(test)]
+type X25519KeyDerivation = extern "C" fn(*const c_uchar, usize, *const c_uchar, usize, *const c_uchar, usize) -> AesNonceAndKeyFromX25519DiffieHellman;
+
+#[cfg(test)]
+fn x25519_derived_key(result: &AesNonceAndKeyFromX25519DiffieHellman) -> Vec<u8> {
+    assert_eq!(0, result.error_code);
+    unsafe { std::slice::from_raw_parts(result.aes_key_ptr, result.aes_key_ptr_length) }.to_vec()
+}
+
+/// Runs an Alice/Bob exchange in which each peer passes the public keys in the
+/// opposite order. Returns (Alice's key, Bob's key, shared secret, Alice's
+/// public key, Bob's public key).
+#[cfg(test)]
+fn x25519_exchange(derive: X25519KeyDerivation) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
+    let alice = x25519::generate_secret_and_public_key();
+    let bob = x25519::generate_secret_and_public_key();
+    let alice_shared_secret = x25519::diffie_hellman(alice.secret_key, alice.secret_key_length, bob.public_key, bob.public_key_length);
+    let bob_shared_secret = x25519::diffie_hellman(bob.secret_key, bob.secret_key_length, alice.public_key, alice.public_key_length);
+    assert_eq!(0, alice_shared_secret.error_code);
+    assert_eq!(0, bob_shared_secret.error_code);
+    let shared_secret = unsafe { std::slice::from_raw_parts(alice_shared_secret.shared_secret, alice_shared_secret.shared_secret_length) }.to_vec();
+    let bob_shared_secret_slice = unsafe { std::slice::from_raw_parts(bob_shared_secret.shared_secret, bob_shared_secret.shared_secret_length) };
+    assert_eq!(shared_secret.as_slice(), bob_shared_secret_slice);
+    let alice_public_key = unsafe { std::slice::from_raw_parts(alice.public_key, alice.public_key_length) }.to_vec();
+    let bob_public_key = unsafe { std::slice::from_raw_parts(bob.public_key, bob.public_key_length) }.to_vec();
+
+    let alice_key = x25519_derived_key(&derive(
+        alice_shared_secret.shared_secret, alice_shared_secret.shared_secret_length,
+        alice.public_key, alice.public_key_length,
+        bob.public_key, bob.public_key_length,
+    ));
+    let bob_key = x25519_derived_key(&derive(
+        bob_shared_secret.shared_secret, bob_shared_secret.shared_secret_length,
+        bob.public_key, bob.public_key_length,
+        alice.public_key, alice.public_key_length,
+    ));
+    (alice_key, bob_key, shared_secret, alice_public_key, bob_public_key)
+}
 
 #[test]
 pub fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
-    let alice_secret_and_public_key = x25519::generate_secret_and_public_key();
-    let bob_secret_and_public_key = x25519::generate_secret_and_public_key();
-    let alice_shared_secret = x25519::diffie_hellman(
-        alice_secret_and_public_key.secret_key,
-        alice_secret_and_public_key.secret_key_length,
-        bob_secret_and_public_key.public_key,
-        bob_secret_and_public_key.public_key_length,
-    );
-    let bob_shared_secret = x25519::diffie_hellman(
-        bob_secret_and_public_key.secret_key,
-        bob_secret_and_public_key.secret_key_length,
-        alice_secret_and_public_key.public_key,
-        alice_secret_and_public_key.public_key_length,
-    );
-    let alice_shared_secret_slice: &[u8] = unsafe {
-        std::slice::from_raw_parts(
-            alice_shared_secret.shared_secret,
-            alice_shared_secret.shared_secret_length,
-        )
-    };
-    let bob_shared_secret_slice: &[u8] = unsafe {
-        std::slice::from_raw_parts(
-            bob_shared_secret.shared_secret,
-            bob_shared_secret.shared_secret_length,
-        )
-    };
-    assert_eq!(alice_shared_secret_slice, bob_shared_secret_slice);
-
-    let alice_secret_key: *const std::os::raw::c_uchar = alice_shared_secret.shared_secret;
-
-    let alice_aes = aes_256_key_from_x25519_diffie_hellman_shared_secret(
-        alice_secret_key,
-        alice_shared_secret.shared_secret_length,
-    );
-    
-    let bob_aes = aes_256_key_from_x25519_diffie_hellman_shared_secret(
-        bob_shared_secret.shared_secret,
-        bob_shared_secret.shared_secret_length,
-    );
+    let (alice_key, bob_key, shared_secret, _, _) = x25519_exchange(aes_256_key_from_x25519_diffie_hellman_shared_secret);
+    assert_eq!(32, alice_key.len());
+    assert_eq!(alice_key, bob_key);
+    // The key goes through HKDF: it is not the raw Diffie-Hellman output (#91).
+    assert_ne!(shared_secret, alice_key);
 
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
     let nonce = CASAES256::generate_nonce();
     let nonce_ptr = nonce.as_ptr();
-    let cipher_text_result = aes_256_encrypt_bytes_with_key(nonce_ptr, nonce.len(), alice_aes.aes_key_ptr, alice_aes.aes_key_ptr_length, password_ptr, password_cstr.len());
-    let plain_text_result = aes_256_decrypt_bytes_with_key(nonce_ptr, nonce.len(), bob_aes.aes_key_ptr, bob_aes.aes_key_ptr_length, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_256_encrypt_bytes_with_key(nonce_ptr, nonce.len(), alice_key.as_ptr(), alice_key.len(), password_ptr, password_cstr.len());
+    let plain_text_result = aes_256_decrypt_bytes_with_key(nonce_ptr, nonce.len(), bob_key.as_ptr(), bob_key.len(), cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
          std::slice::from_raw_parts(
              plain_text_result.plaintext,
@@ -145,81 +195,20 @@ pub fn aes_256_key_and_nonce_from_x25519_diffie_hellman_shared_secret_test() {
      assert_eq!(password_cstr, plain_text_result_slice);
 }
 
-#[no_mangle]
-pub extern "C" fn aes_128_key_from_x25519_diffie_hellman_shared_secret(
-    shared_secret: *const c_uchar,
-    shared_secret_length: usize,
-) -> AesNonceAndKeyFromX25519DiffieHellman {
-    let shared_secret_slice: Vec<u8> =
-        unsafe { std::slice::from_raw_parts(shared_secret, shared_secret_length) }.to_vec();
-    match <CASAES128 as CASAES128Encryption>::key_from_x25519_shared_secret(shared_secret_slice) {
-        Ok(aes_key) => {
-            let result = AesNonceAndKeyFromX25519DiffieHellman {
-                aes_key_ptr: export_bytes(&aes_key),
-                aes_key_ptr_length: aes_key.len(),
-                error_code: 0,
-            };
-            result
-        }
-        Err(e) => AesNonceAndKeyFromX25519DiffieHellman {
-            aes_key_ptr: std::ptr::null_mut(),
-            aes_key_ptr_length: 0,
-            error_code: cas_error_code(&e),
-        },
-    }
-}
-
-
-
 #[test]
 pub fn aes_128_key_from_x25519_diffie_hellman_shared_secret_test() {
-    let alice_secret_and_public_key = x25519::generate_secret_and_public_key();
-    let bob_secret_and_public_key = x25519::generate_secret_and_public_key();
-    let alice_shared_secret = x25519::diffie_hellman(
-        alice_secret_and_public_key.secret_key,
-        alice_secret_and_public_key.secret_key_length,
-        bob_secret_and_public_key.public_key,
-        bob_secret_and_public_key.public_key_length,
-    );
-    let bob_shared_secret = x25519::diffie_hellman(
-        bob_secret_and_public_key.secret_key,
-        bob_secret_and_public_key.secret_key_length,
-        alice_secret_and_public_key.public_key,
-        alice_secret_and_public_key.public_key_length,
-    );
-    let alice_shared_secret_slice: &[u8] = unsafe {
-        std::slice::from_raw_parts(
-            alice_shared_secret.shared_secret,
-            alice_shared_secret.shared_secret_length,
-        )
-    };
-    let bob_shared_secret_slice: &[u8] = unsafe {
-        std::slice::from_raw_parts(
-            bob_shared_secret.shared_secret,
-            bob_shared_secret.shared_secret_length,
-        )
-    };
-    assert_eq!(alice_shared_secret_slice, bob_shared_secret_slice);
-
-    let alice_secret_key: *const std::os::raw::c_uchar = alice_shared_secret.shared_secret;
-
-    let alice_aes = aes_128_key_from_x25519_diffie_hellman_shared_secret(
-        alice_secret_key,
-        alice_shared_secret.shared_secret_length,
-    );
-    
-    let bob_aes = aes_128_key_from_x25519_diffie_hellman_shared_secret(
-        bob_shared_secret.shared_secret,
-        bob_shared_secret.shared_secret_length,
-    );
+    let (alice_key, bob_key, shared_secret, _, _) = x25519_exchange(aes_128_key_from_x25519_diffie_hellman_shared_secret);
+    assert_eq!(16, alice_key.len());
+    assert_eq!(alice_key, bob_key);
+    assert_ne!(&shared_secret[..16], alice_key.as_slice());
 
     let password = "DontUseThisPassword";
     let password_cstr = password.as_bytes();
     let password_ptr = password.as_ptr();
     let nonce = CASAES128::generate_nonce();
     let nonce_ptr = nonce.as_ptr();
-    let cipher_text_result = aes_128_encrypt_bytes_with_key(nonce_ptr, nonce.len(), alice_aes.aes_key_ptr, alice_aes.aes_key_ptr_length, password_ptr, password_cstr.len());
-    let plain_text_result = aes_128_decrypt_bytes_with_key(nonce_ptr, nonce.len(), bob_aes.aes_key_ptr, bob_aes.aes_key_ptr_length, cipher_text_result.ciphertext, cipher_text_result.length);
+    let cipher_text_result = aes_128_encrypt_bytes_with_key(nonce_ptr, nonce.len(), alice_key.as_ptr(), alice_key.len(), password_ptr, password_cstr.len());
+    let plain_text_result = aes_128_decrypt_bytes_with_key(nonce_ptr, nonce.len(), bob_key.as_ptr(), bob_key.len(), cipher_text_result.ciphertext, cipher_text_result.length);
     let plain_text_result_slice: &[u8] = unsafe {
         std::slice::from_raw_parts(
             plain_text_result.plaintext,
@@ -227,6 +216,50 @@ pub fn aes_128_key_from_x25519_diffie_hellman_shared_secret_test() {
         )
     };
     assert_eq!(password_cstr, plain_text_result_slice);
+}
+
+#[test]
+pub fn x25519_derived_keys_are_bound_to_cipher_and_public_keys_test() {
+    let (_, _, shared_secret, alice_public_key, bob_public_key) = x25519_exchange(aes_256_key_from_x25519_diffie_hellman_shared_secret);
+    let derive = |f: X25519KeyDerivation, a: &[u8], b: &[u8]| {
+        x25519_derived_key(&f(shared_secret.as_ptr(), shared_secret.len(), a.as_ptr(), a.len(), b.as_ptr(), b.len()))
+    };
+    let key_256 = derive(aes_256_key_from_x25519_diffie_hellman_shared_secret, &alice_public_key, &bob_public_key);
+    let key_128 = derive(aes_128_key_from_x25519_diffie_hellman_shared_secret, &alice_public_key, &bob_public_key);
+    assert_ne!(&key_256[..16], key_128.as_slice());
+
+    // A substituted public key changes the derived key.
+    let mallory = x25519::generate_secret_and_public_key();
+    let mallory_public_key = unsafe { std::slice::from_raw_parts(mallory.public_key, mallory.public_key_length) }.to_vec();
+    let substituted = derive(aes_256_key_from_x25519_diffie_hellman_shared_secret, &alice_public_key, &mallory_public_key);
+    assert_ne!(key_256, substituted);
+}
+
+#[test]
+pub fn x25519_key_derivation_rejects_bad_inputs_test() {
+    let invalid_key = cas_error_code(&cas_lib::error::CasError::InvalidKey);
+    let secret = [1u8; 32];
+    let zero_secret = [0u8; 32];
+    let short_secret = [1u8; 31];
+    let public_key = [9u8; 32];
+    let short_public_key = [9u8; 31];
+    let derivations: [X25519KeyDerivation; 2] = [
+        aes_256_key_from_x25519_diffie_hellman_shared_secret,
+        aes_128_key_from_x25519_diffie_hellman_shared_secret,
+    ];
+    for derive in derivations {
+        for (s, a, b) in [
+            (&zero_secret[..], &public_key[..], &public_key[..]),
+            (&short_secret[..], &public_key[..], &public_key[..]),
+            (&secret[..], &short_public_key[..], &public_key[..]),
+            (&secret[..], &public_key[..], &short_public_key[..]),
+        ] {
+            let result = derive(s.as_ptr(), s.len(), a.as_ptr(), a.len(), b.as_ptr(), b.len());
+            assert!(result.aes_key_ptr.is_null());
+            assert_eq!(0, result.aes_key_ptr_length);
+            assert_eq!(invalid_key, result.error_code);
+        }
+    }
 }
 
 #[no_mangle]

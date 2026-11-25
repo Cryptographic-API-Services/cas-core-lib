@@ -136,3 +136,25 @@ fn free_x25519_results_test() {
     free_x25519_secret_public_key_result(&mut bob);
     free_x25519_secret_public_key_result(std::ptr::null_mut());
 }
+
+#[test]
+pub fn diffie_hellman_rejects_low_order_public_keys_test() {
+    let invalid_key = cas_error_code(&cas_lib::error::CasError::InvalidKey);
+    let keys = generate_secret_and_public_key();
+    // Low-order points from RFC 7748 / Wycheproof: each forces an all-zero
+    // shared secret, so the exchange is refused (#98).
+    let mut low_order_public_keys: Vec<[u8; 32]> = vec![[0u8; 32]];
+    let mut one = [0u8; 32];
+    one[0] = 1;
+    low_order_public_keys.push(one);
+    low_order_public_keys.push([
+        0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4, 0x6a,
+        0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00,
+    ]);
+    for public_key in low_order_public_keys {
+        let result = diffie_hellman(keys.secret_key, keys.secret_key_length, public_key.as_ptr(), public_key.len());
+        assert!(result.shared_secret.is_null());
+        assert_eq!(0, result.shared_secret_length);
+        assert_eq!(invalid_key, result.error_code);
+    }
+}

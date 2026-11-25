@@ -8,10 +8,8 @@
 #   one is usually yanked for a reason. Both are normally a lockfile-only fix.
 #   `unmaintained` warnings are reported but don't fail the job, because they
 #   rarely have a quick fix and would block unrelated PRs.
-# - Only the two advisories listed at the audit step are ignored. Both come in
-#   via cas-lib 0.2.95 (#90) and only a cas-lib release can clear them; the
-#   cas-lib 0.5.1 bump (#118) removes both ignores. Ignore nothing else without
-#   saying why in the PR.
+# - No advisories are ignored. If one ever has to be, add an `--ignore` with a
+#   comment saying why and which issue removes it, and say why in the PR.
 # - cargo-audit is pinned and installed with --locked; the action is pinned to
 #   a commit SHA; the workflow grants nothing beyond read access to the repo.
 name: Cargo audit
@@ -49,11 +47,4 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --version "$CARGO_AUDIT_VERSION" --locked
       - name: Audit Cargo.lock
-        # RUSTSEC-2023-0071: rsa 0.9 (Marvin timing side channel). Comes via
-        #   cas-lib 0.2.95 (#90); removed by the cas-lib 0.5.1 bump (#118).
-        # RUSTSEC-2026-0387: crypto-bigint 0.5, via hpke -> p256. Comes via
-        #   cas-lib 0.2.95 (#90); removed by the cas-lib 0.5.1 bump (#118).
-        run: >-
-          cargo audit --deny unsound --deny yanked
-          --ignore RUSTSEC-2023-0071
-          --ignore RUSTSEC-2026-0387
+        run: cargo audit --deny unsound --deny yanked
