@@ -49,6 +49,19 @@ Tests live inline in the same files as `#[test]` functions and typically exercis
 
 PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): summary`, `!` after the type for a breaking change), e.g. `fix(rsa): reject keys under 2048 bits`. PRs are squash-merged, so the title becomes the commit message and the `CHANGELOG.md` line. [`.github/workflows/pr-title.yml`](.github/workflows/pr-title.yml) checks it; allowed types: `feat`, `fix`, `security`, `changed`, `deprecated`, `docs`, `perf`, `refactor`, `test`, `ci`, `build`, `chore`, `revert`.
 
+## C# bindings (csbindgen)
+
+[`build.rs`](build.rs) runs csbindgen over every `.rs` file under `src/` and writes the .NET P/Invoke bindings to `$OUT_DIR/NativeMethods.g.cs` (under `target/<profile>/build/cas_core_lib-*/out/`). A plain build writes nothing outside `target/`.
+
+To regenerate the bindings that cas-dotnet-sdk compiles, set `CAS_DOTNET_BINDINGS_DIR` to its `generated/` directory. A relative path is resolved against this crate's directory:
+
+```bash
+# from the cas-core-lib submodule inside cas-dotnet-sdk
+CAS_DOTNET_BINDINGS_DIR=../cas-dotnet-sdk/generated cargo build --release
+```
+
+Changing the variable re-runs the build script. If you add or rename an FFI function, regenerate the bindings and commit `NativeMethods.g.cs` in cas-dotnet-sdk.
+
 ## Versioning
 
 Versions are bumped by the release PR (see Releases), not by hand: mark FFI-breaking changes with `!` in the PR title. Keep the pinned `cas-lib` dependency version in sync with the behavior the consumer SDKs expect.
