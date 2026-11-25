@@ -1,12 +1,11 @@
 name: Windows PR Tests
 
 # Runs on every PR, whatever the base branch, so PRs into epic/** integration
-# branches get CI too (#109), and again on every merge into main or an epic/**
-# branch, so the merged result is tested and not only the PR head.
+# branches get CI too (#109), and on every push to any branch, so every merge
+# is tested as merged and not only as the PR head.
 on:
   pull_request:
   push:
-    branches: [ "main", "epic/**" ]
   workflow_dispatch:
 
 concurrency:
